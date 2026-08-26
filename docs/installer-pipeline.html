@@ -1,0 +1,2019 @@
+<title>Installer le pipeline Nova</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F4F6; --surface:#FFF; --surface-2:#E8ECF1;
+  --ink:#10151C; --ink-2:#3C4654; --muted:#6B7787;
+  --rule:#D7DDE4; --accent:#1F4FD8; --accent-soft:#E1E8FC;
+  --ok:#0E6B52; --ok-soft:#DCEFE7; --warn:#9A5A00; --warn-soft:#FBEBD2;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --pad:clamp(1.1rem,4vw,2.5rem);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0B0F14; --surface:#121820; --surface-2:#1A222C;
+  --ink:#E4E9EF; --ink-2:#B4BFCC; --muted:#7C8899;
+  --rule:#212B36; --accent:#7BA2FF; --accent-soft:#16233C;
+  --ok:#4FBF9A; --ok-soft:#10251F; --warn:#D9A23B; --warn-soft:#2A2113;
+}}
+:root[data-theme="dark"]{
+  --ground:#0B0F14; --surface:#121820; --surface-2:#1A222C;
+  --ink:#E4E9EF; --ink-2:#B4BFCC; --muted:#7C8899;
+  --rule:#212B36; --accent:#7BA2FF; --accent-soft:#16233C;
+  --ok:#4FBF9A; --ok-soft:#10251F; --warn:#D9A23B; --warn-soft:#2A2113;
+}
+*{box-sizing:border-box}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--body);font-size:1rem;line-height:1.65}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.wrap{max-width:60rem;margin:0 auto;padding:0 var(--pad) 5rem}
+header{padding:clamp(2.5rem,7vw,4rem) 0 1.5rem}
+.eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 .9rem}
+h1{font-family:var(--display);font-weight:700;letter-spacing:-.03em;line-height:1.05;
+  font-size:clamp(1.9rem,5vw,3rem);margin:0 0 1rem;text-wrap:balance}
+.lede{color:var(--ink-2);max-width:58ch;margin:0}
+h2{font-family:var(--display);font-weight:700;letter-spacing:-.02em;
+  font-size:1.35rem;margin:2.75rem 0 .8rem}
+p{max-width:64ch}
+code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);
+  border-radius:3px;padding:.1em .34em}
+pre{font-family:var(--mono);font-size:.75rem;line-height:1.55;background:var(--surface);
+  color:var(--ink-2);border:1px solid var(--rule);border-radius:0 0 6px 6px;
+  padding:1rem;overflow:auto;max-height:24rem;margin:0}
+pre code{background:none;padding:0;font-size:inherit}
+.hero-action{background:var(--surface);border:1px solid var(--rule);border-radius:8px;
+  padding:1.25rem;margin:1.75rem 0}
+.hero-action .row{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.big{font-family:var(--body);font-weight:600;font-size:1rem;cursor:pointer;
+  background:var(--accent);color:#fff;border:0;border-radius:6px;padding:.7rem 1.4rem}
+.big:hover{filter:brightness(1.08)}
+.big.done{background:var(--ok)}
+.hint{font-size:.875rem;color:var(--muted);margin:.7rem 0 0}
+.steps{counter-reset:s;list-style:none;padding:0;margin:1rem 0;max-width:64ch}
+.steps li{counter-increment:s;display:flex;gap:.85rem;padding:.6rem 0;
+  border-bottom:1px solid var(--rule)}
+.steps li:last-child{border-bottom:0}
+.steps li::before{content:counter(s);font-family:var(--mono);font-size:.72rem;
+  color:var(--accent);background:var(--accent-soft);border-radius:4px;
+  width:1.5rem;height:1.5rem;display:grid;place-items:center;flex:none;margin-top:.1rem}
+.note{border-left:2px solid var(--rule);background:var(--surface);padding:.85rem 1.05rem;
+  border-radius:0 5px 5px 0;margin:1.2rem 0;max-width:64ch;font-size:.925rem}
+.note.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+.note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.note p{margin:0}
+.file{margin:1rem 0}
+.file-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  background:var(--surface-2);border:1px solid var(--rule);border-bottom:0;
+  border-radius:6px 6px 0 0;padding:.5rem .8rem}
+.path{background:none;padding:0;font-size:.78rem;color:var(--ink)}
+.copy{font-family:var(--mono);font-size:.7rem;letter-spacing:.04em;cursor:pointer;
+  background:var(--surface);color:var(--ink-2);border:1px solid var(--rule);
+  border-radius:4px;padding:.25rem .6rem}
+.copy:hover{border-color:var(--accent);color:var(--accent)}
+.copy.done{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+#script{max-height:16rem}
+</style>
+<div class="wrap">
+<header>
+  <p class="eyebrow">Nova — livraison sans téléchargement</p>
+  <h1>Installer le pipeline</h1>
+  <p class="lede">Le pipeline complet, le worker ARQ, le formatage WhatsApp et les
+  validations en attente. Tu copies un script, tu le colles dans PowerShell, les
+  6 fichiers s'écrivent au bon endroit.</p>
+</header>
+
+<div class="hero-action">
+  <div class="row">
+    <button class="big" id="copyScript">Copier le script d'installation</button>
+    <span class="hint">6 fichiers · aucun téléchargement requis</span>
+  </div>
+  <p class="hint"><code>handle_message</code> n'est plus un <code>NotImplementedError</code>.</p>
+</div>
+
+<h2>Marche à suivre</h2>
+<ol class="steps">
+  <li><span>Clique sur <strong>Copier le script d'installation</strong>.</span></li>
+  <li><span>Ouvre <strong>PowerShell</strong>, colle avec <strong>Ctrl+V</strong>, puis
+      <strong>Entrée</strong>. Six lignes <code>ecrit ...</code> défilent.</span></li>
+  <li><span>Publie :<br><code>git add . ; git commit -m "Implement the message pipeline and ARQ worker" ; git push</code></span></li>
+  <li><span>Vérifie :<br><code>cd core ; pytest -q</code> → <strong>137 passed</strong></span></li>
+</ol>
+
+<div class="note ok"><p><strong>5 fichiers nouveaux</strong>, plus <code>core/README.md</code>
+mis à jour. Aucun autre fichier existant n'est touché.</p></div>
+
+<h2>Le script</h2>
+<section class="file">
+  <div class="file-head"><code class="path">nova-pipeline.ps1</code>
+    <button class="copy" data-target="script">Copier</button></div>
+  <pre id="script"><code># Nova - pipeline handle_message + worker ARQ
+# Colle ce script entier dans PowerShell, depuis n'importe ou.
+
+$repo = 'C:\Users\Laptop\my-agent\my-agent'
+if (-not (Test-Path $repo)) { Write-Error "Depot introuvable: $repo"; exit 1 }
+Set-Location $repo
+
+$c = @'
+"""Le pipeline complet : d'un message entrant à une action accomplie.
+
+Ordre de traitement, et pourquoi il est dans cet ordre :
+
+1. **Reprise de validation d'abord.** Si un « ok » est attendu sur ce fil, il
+   doit être interprété comme tel — pas replanifié comme une nouvelle demande.
+   Inverser ces deux étapes fait qu'un « ok » relance une planification vide.
+2. **Transcription.** Un vocal mal transcrit vaut mieux refusé que deviné : sous
+   le seuil de confiance, on demande de répéter plutôt que d'agir à l'aveugle.
+3. **Routage.** Les requêtes triviales n'ont pas besoin du gros modèle.
+4. **Planification, exécution, gate, réponse.**
+
+Les dépendances lourdes — modèle de langage, transcription, envoi — sont des
+protocoles injectés. Le pipeline se teste donc entièrement hors ligne.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Protocol
+
+from .approvals import ApprovalRegistry, PendingApproval
+from .gate import classify_reply, format_approval_summary
+from .graph.executor import ExecutionState, execute_plan
+from .messaging import ChannelFormatter, Sender
+from .planning import PlanError, Task
+from .tools.registry import ToolRegistry
+
+#: En dessous, la transcription n'est pas exploitable.
+MIN_TRANSCRIPT_CONFIDENCE = 0.6
+
+
+@dataclass
+class IncomingMessage:
+    id: str
+    user_id: str
+    thread_id: str
+    channel: str
+    from_id: str
+    kind: str = "text"  # text | audio | image
+    text: str | None = None
+    media_url: str | None = None
+
+
+class Transcriber(Protocol):
+    async def transcribe(self, media_url: str) -&gt; tuple[str, float]: ...
+
+
+class Router(Protocol):
+    async def route(self, text: str, context: dict) -&gt; dict: ...
+
+
+class Planner(Protocol):
+    async def plan(self, text: str, context: dict) -&gt; list[Task]: ...
+
+
+class Responder(Protocol):
+    async def summarize(self, text: str, state: ExecutionState, context: dict) -&gt; str: ...
+
+
+@dataclass
+class Pipeline:
+    tools: ToolRegistry
+    router: Router
+    planner: Planner
+    responder: Responder
+    sender: Sender
+    approvals: ApprovalRegistry = field(default_factory=ApprovalRegistry)
+    transcriber: Transcriber | None = None
+
+    async def handle(self, message: IncomingMessage, now: datetime | None = None) -&gt; str:
+        """Traite un message et renvoie ce qui a été envoyé à l'utilisateur."""
+        now = now or datetime.now(timezone.utc)
+        formatter = ChannelFormatter(message.channel)
+
+        text = await self._resolve_text(message)
+        if text is None:
+            return await self._reply(message, formatter, "🎤 Je n'ai pas bien saisi, tu peux répéter ?")
+
+        pending = self.approvals.get(message.thread_id, now)
+        if pending is not None:
+            return await self._resume(message, formatter, pending, text, now)
+
+        return await self._fresh_request(message, formatter, text, now)
+
+    # --- étapes ----------------------------------------------------------
+
+    async def _resolve_text(self, message: IncomingMessage) -&gt; str | None:
+        if message.kind != "audio":
+            return (message.text or "").strip() or None
+        if self.transcriber is None or not message.media_url:
+            return None
+        transcript, confidence = await self.transcriber.transcribe(message.media_url)
+        if confidence &lt; MIN_TRANSCRIPT_CONFIDENCE or not transcript.strip():
+            return None
+        return transcript.strip()
+
+    async def _resume(
+        self,
+        message: IncomingMessage,
+        formatter: ChannelFormatter,
+        pending: PendingApproval,
+        text: str,
+        now: datetime,
+    ) -&gt; str:
+        decision = classify_reply(text)
+
+        if decision == "reject":
+            self.approvals.pop(message.thread_id, now)
+            return await self._reply(message, formatter, "OK, annulé.")
+
+        if decision == "edit":
+            # L'utilisateur veut autre chose : on abandonne le plan suspendu et
+            # on replanifie à partir de sa correction, plutôt que de deviner.
+            self.approvals.pop(message.thread_id, now)
+            return await self._fresh_request(message, formatter, text, now)
+
+        self.approvals.pop(message.thread_id, now)
+        state = ExecutionState(
+            results=dict(pending.results), completed=list(pending.completed)
+        )
+        state = await execute_plan(
+            pending.plan, self.tools, state, approved_task_ids=frozenset({pending.task.id})
+        )
+        return await self._finish(message, formatter, text, state, now)
+
+    async def _fresh_request(
+        self,
+        message: IncomingMessage,
+        formatter: ChannelFormatter,
+        text: str,
+        now: datetime,
+    ) -&gt; str:
+        context = {"channel": message.channel, "user_id": message.user_id, "now": now}
+
+        decision = await self.router.route(text, context)
+        if decision.get("complexity") == "trivial" and not decision.get("requires_tools"):
+            answer = await self.responder.summarize(text, ExecutionState(), context)
+            return await self._reply(message, formatter, answer)
+
+        try:
+            plan = await self.planner.plan(text, context)
+        except PlanError as exc:
+            return await self._reply(message, formatter, f"⚠️ Je n'ai pas pu construire le plan : {exc}")
+
+        if not plan:
+            answer = await self.responder.summarize(text, ExecutionState(), context)
+            return await self._reply(message, formatter, answer)
+
+        state = await execute_plan(plan, self.tools)
+        return await self._finish(message, formatter, text, state, now, plan)
+
+    async def _finish(
+        self,
+        message: IncomingMessage,
+        formatter: ChannelFormatter,
+        text: str,
+        state: ExecutionState,
+        now: datetime,
+        plan: list[Task] | None = None,
+    ) -&gt; str:
+        if state.suspended:
+            approval = state.pending_approval
+            assert approval is not None
+            summary = format_approval_summary(approval.task, approval.prepared)
+            self.approvals.put(
+                PendingApproval(
+                    thread_id=message.thread_id,
+                    user_id=message.user_id,
+                    task=approval.task,
+                    plan=plan or [],
+                    results=dict(state.results),
+                    completed=list(state.completed),
+                    summary=summary,
+                    requested_at=now,
+                )
+            )
+            return await self._reply(message, formatter, summary)
+
+        context = {"channel": message.channel, "user_id": message.user_id, "now": now}
+        answer = await self.responder.summarize(text, state, context)
+        return await self._reply(message, formatter, answer)
+
+    async def _reply(self, message: IncomingMessage, formatter: ChannelFormatter, body: str) -&gt; str:
+        for chunk in formatter.render(body):
+            await self.sender.send_text(message.from_id, chunk)
+        return body
+
+'@
+Set-Content -Path 'core\core\pipeline.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/core/pipeline.py'
+
+$c = @'
+"""Validations en attente — l'état qui survit entre deux messages.
+
+Quand l'exécuteur suspend un plan devant une action sortante, il faut conserver
+de quoi reprendre : le plan, les résultats déjà obtenus, et la tâche à valider.
+Ce registre porte cet état, indexé par fil de conversation.
+
+Deux règles qui évitent des dégâts réels :
+
+- **Une seule validation en attente par fil.** Sinon un « ok » ambigu pourrait
+  valider une action que l'utilisateur croyait abandonnée.
+- **Expiration à 30 minutes.** Un « ok » tapé une heure plus tard répond à autre
+  chose. L'agent ne relance pas, et la validation périmée est refusée.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
+from .gate import APPROVAL_TTL, is_expired
+from .planning import Task
+
+
+@dataclass
+class PendingApproval:
+    thread_id: str
+    user_id: str
+    task: Task
+    plan: list[Task]
+    results: dict[str, Any]
+    completed: list[str]
+    summary: str
+    requested_at: datetime
+
+    def expired(self, now: datetime | None = None) -&gt; bool:
+        return is_expired(self.requested_at, now)
+
+
+@dataclass
+class ApprovalRegistry:
+    """En mémoire ici ; table `approvals` + checkpoint LangGraph en production."""
+
+    pending: dict[str, PendingApproval] = field(default_factory=dict)
+
+    def put(self, approval: PendingApproval) -&gt; None:
+        # Remplace toute validation antérieure sur ce fil : une seule à la fois.
+        self.pending[approval.thread_id] = approval
+
+    def get(self, thread_id: str, now: datetime | None = None) -&gt; PendingApproval | None:
+        approval = self.pending.get(thread_id)
+        if approval is None:
+            return None
+        if approval.expired(now):
+            del self.pending[thread_id]
+            return None
+        return approval
+
+    def pop(self, thread_id: str, now: datetime | None = None) -&gt; PendingApproval | None:
+        approval = self.get(thread_id, now)
+        if approval is not None:
+            del self.pending[thread_id]
+        return approval
+
+    def purge(self, now: datetime | None = None) -&gt; int:
+        now = now or datetime.now(timezone.utc)
+        stale = [tid for tid, a in self.pending.items() if a.expired(now)]
+        for tid in stale:
+            del self.pending[tid]
+        return len(stale)
+
+
+def ttl_minutes() -&gt; int:
+    return int(APPROVAL_TTL.total_seconds() // 60)
+
+'@
+Set-Content -Path 'core\core\approvals.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/core/approvals.py'
+
+$c = @'
+"""Formatage et envoi sortants — adapter la réponse au canal.
+
+WhatsApp n'est pas un terminal : pas de tableaux, pas de titres, une syntaxe de
+gras qui lui est propre, et une limite dure à 4096 caractères par message. Une
+réponse pensée pour le dashboard y devient illisible.
+
+Le découpage se fait sur les frontières naturelles du texte — paragraphe, puis
+ligne, puis phrase — parce qu'une coupure au milieu d'un mot dans un message de
+confirmation donne l'impression que l'agent a planté.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Protocol
+
+WHATSAPP_LIMIT = 4096
+SAFE_CHUNK = 3900  # marge pour le suffixe de pagination
+
+
+class Sender(Protocol):
+    async def send_text(self, to: str, body: str) -&gt; None: ...
+
+
+def to_whatsapp(markdown: str) -&gt; str:
+    """Convertit le markdown courant vers la syntaxe WhatsApp.
+
+    `**gras**` → `*gras*`, `*italique*` → `_italique_`. Les titres deviennent du
+    gras, les tableaux sont aplatis : WhatsApp les rend en bouillie sinon.
+    """
+    text = markdown.strip()
+
+    # Protéger les blocs de code avant toute substitution.
+    blocks: list[str] = []
+
+    def stash(match: re.Match) -&gt; str:
+        blocks.append(match.group(0))
+        return f"\x00{len(blocks) - 1}\x00"
+
+    text = re.sub(r"```.*?```", stash, text, flags=re.S)
+    text = re.sub(r"`[^`\n]+`", stash, text)
+
+    # Titres et gras passent par le marqueur § : écrire directement `*...*` ici
+    # ferait retomber le résultat dans la règle d'italique juste en dessous.
+    text = re.sub(r"^#{1,6}\s*(.+)$", r"§\1§", text, flags=re.M)   # titres → gras
+    text = re.sub(r"\*\*(.+?)\*\*", r"§\1§", text)                  # gras md → marqueur
+    text = re.sub(r"(?&lt;!\*)\*(?!\*)(.+?)(?&lt;!\*)\*(?!\*)", r"_\1_", text)  # italique
+    text = text.replace("§", "*")                                   # marqueur → gras WA
+    text = re.sub(r"^\s*[-•]\s+", "• ", text, flags=re.M)           # puces
+    text = re.sub(r"^\s*\|.*\|\s*$", _flatten_row, text, flags=re.M)  # tableaux
+    text = re.sub(r"^\s*\|?[-: |]+\|?\s*$", "", text, flags=re.M)   # séparateurs
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    for i, block in enumerate(blocks):
+        text = text.replace(f"\x00{i}\x00", block.replace("```", "```"))
+    return text.strip()
+
+
+def _flatten_row(match: re.Match) -&gt; str:
+    cells = [c.strip() for c in match.group(0).strip().strip("|").split("|")]
+    return " — ".join(c for c in cells if c)
+
+
+def split_message(text: str, limit: int = SAFE_CHUNK) -&gt; list[str]:
+    """Découpe sur les frontières naturelles, jamais au milieu d'un mot."""
+    if len(text) &lt;= limit:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = text
+    while len(remaining) &gt; limit:
+        window = remaining[:limit]
+        cut = max(window.rfind("\n\n"), window.rfind("\n"), window.rfind(". "))
+        if cut &lt;= 0:
+            cut = window.rfind(" ")
+        if cut &lt;= 0:
+            cut = limit  # mot unique plus long que la limite : coupure forcée
+        chunks.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+    if remaining:
+        chunks.append(remaining)
+
+    total = len(chunks)
+    return [f"{c}\n({i}/{total})" for i, c in enumerate(chunks, 1)]
+
+
+@dataclass
+class ChannelFormatter:
+    """Applique les règles de longueur et de format propres à chaque canal."""
+
+    channel: str
+
+    def render(self, markdown: str) -&gt; list[str]:
+        if self.channel == "whatsapp":
+            return split_message(to_whatsapp(markdown))
+        # Desktop, mobile et Chrome affichent du markdown riche.
+        return [markdown.strip()]
+
+
+@dataclass
+class EvolutionSender:
+    """Envoi via Evolution API. Le transport est injecté, donc testable."""
+
+    transport: object
+    base_url: str
+    instance: str
+    api_key: str
+
+    async def send_text(self, to: str, body: str) -&gt; None:
+        from .integrations.http import request_with_retry
+
+        await request_with_retry(
+            self.transport,
+            "POST",
+            f"{self.base_url}/message/sendText/{self.instance}",
+            headers={"apikey": self.api_key},
+            json={"number": to, "text": body},
+        )
+
+    async def send_typing(self, to: str) -&gt; None:
+        """Indicateur « en train d'écrire » : l'utilisateur sait que ça travaille."""
+        from .integrations.http import request_with_retry
+
+        await request_with_retry(
+            self.transport,
+            "POST",
+            f"{self.base_url}/chat/sendPresence/{self.instance}",
+            headers={"apikey": self.api_key},
+            json={"number": to, "presence": "composing"},
+        )
+
+
+@dataclass
+class RecordingSender:
+    """Double de test : conserve ce qui aurait été envoyé."""
+
+    sent: list[tuple[str, str]] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -&gt; None:
+        if self.sent is None:
+            self.sent = []
+
+    async def send_text(self, to: str, body: str) -&gt; None:
+        self.sent.append((to, body))
+
+    async def send_typing(self, to: str) -&gt; None:
+        pass
+
+'@
+Set-Content -Path 'core\core\messaging.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/core/messaging.py'
+
+$c = @'
+"""Worker ARQ — files à priorités et tâches périodiques.
+
+Un rapport hebdomadaire de trois minutes ne doit jamais retarder un « quelle
+heure est mon RDV ». D'où des files séparées, consommées par des pools distincts :
+
+    P0  interactif   — requête utilisateur en cours de conversation
+    P1  &lt; 1 min      — suivi, envoi confirmé
+    P2  &lt; 15 min     — synchronisation, triage, indexation mémoire
+    P3  best effort  — résumés longs, rapports
+
+Un seul pool partagé suffirait fonctionnellement, mais une tâche lente y bloque
+la file entière : c'est précisément ce qu'on veut éviter côté latence perçue.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from enum import IntEnum
+
+log = logging.getLogger("nova.worker")
+
+
+class Priority(IntEnum):
+    INTERACTIVE = 0
+    FOLLOW_UP = 1
+    BACKGROUND = 2
+    BEST_EFFORT = 3
+
+    @property
+    def queue(self) -&gt; str:
+        return f"nova:p{int(self)}"
+
+
+#: Verrou par ressource : deux créations concurrentes sur le même agenda
+#: produisent des doublons que l'idempotence seule ne rattrape pas, puisque
+#: les clés diffèrent.
+def resource_lock(user_id: str, resource: str) -&gt; str:
+    return f"nova:lock:{user_id}:{resource}"
+
+
+@dataclass
+class JobContext:
+    """Dépendances injectées dans les jobs au démarrage du worker."""
+
+    pipeline: object
+    registry: object
+    approvals: object
+
+
+async def handle_message_job(ctx: dict, user_id: str, payload: dict) -&gt; str:
+    """Job P0 : traite un message entrant de bout en bout."""
+    from .pipeline import IncomingMessage
+
+    deps: JobContext = ctx["deps"]
+    message = IncomingMessage(
+        id=payload["id"],
+        user_id=user_id,
+        thread_id=payload.get("thread_id") or f"{payload['channel']}:{payload['from_id']}",
+        channel=payload["channel"],
+        from_id=payload["from_id"],
+        kind=payload.get("kind", "text"),
+        text=payload.get("text"),
+        media_url=payload.get("media_url"),
+    )
+    return await deps.pipeline.handle(message)
+
+
+async def purge_approvals_job(ctx: dict) -&gt; int:
+    """Job P2 : retire les validations périmées. L'agent ne relance jamais."""
+    deps: JobContext = ctx["deps"]
+    removed = deps.approvals.purge()
+    if removed:
+        log.info("%d validation(s) expirée(s) purgée(s)", removed)
+    return removed
+
+
+async def sync_calendars_job(ctx: dict, user_id: str) -&gt; int:
+    """Job P2 : synchronisation incrémentale, avec resync complet sur 410."""
+    from .providers.google_calendar import SyncTokenExpired
+
+    deps: JobContext = ctx["deps"]
+    provider = getattr(deps, "calendar_provider", None)
+    if provider is None:
+        return 0
+    try:
+        result = await provider.sync(sync_token=ctx.get("sync_token"))
+    except SyncTokenExpired:
+        log.info("syncToken expiré, resynchronisation complète")
+        result = await provider.sync(sync_token=None)
+    ctx["sync_token"] = result.next_sync_token
+    return len(result.events)
+
+
+async def startup(ctx: dict) -&gt; None:
+    log.info("worker démarré")
+
+
+async def shutdown(ctx: dict) -&gt; None:
+    log.info("worker arrêté")
+
+
+class WorkerSettings:
+    """Configuration ARQ. Lancement : `arq core.workers.WorkerSettings`.
+
+    `max_tries` et `retry_delay` valent pour les erreurs transitoires ; les
+    erreurs métier ne sont pas rejouées — un plan invalide le restera.
+    """
+
+    functions = [handle_message_job, purge_approvals_job, sync_calendars_job]
+    on_startup = startup
+    on_shutdown = shutdown
+    queue_name = Priority.INTERACTIVE.queue
+    max_jobs = 10
+    job_timeout = 120
+    max_tries = 3
+    keep_result = 3600
+
+    @staticmethod
+    def cron_jobs():
+        """Tâches périodiques. Importé paresseusement : arq est optionnel en test."""
+        from arq import cron  # noqa: PLC0415
+
+        return [
+            cron(purge_approvals_job, minute={0, 15, 30, 45}),
+            cron(sync_calendars_job, minute={5, 20, 35, 50}),
+        ]
+
+
+class BackgroundWorkerSettings(WorkerSettings):
+    """Pool séparé pour P2/P3 : une tâche lente n'y bloque pas l'interactif."""
+
+    queue_name = Priority.BACKGROUND.queue
+    max_jobs = 4
+    job_timeout = 600
+
+'@
+Set-Content -Path 'core\core\workers.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/core/workers.py'
+
+$c = @'
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from core.approvals import ApprovalRegistry
+from core.messaging import ChannelFormatter, RecordingSender, split_message, to_whatsapp
+from core.pipeline import IncomingMessage, Pipeline
+from core.planning import Task
+from core.tools.registry import ToolRegistry
+from core.workers import Priority, resource_lock
+
+T0 = datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+# --- doubles ---------------------------------------------------------------
+
+class FakeRouter:
+    def __init__(self, trivial=False):
+        self.trivial = trivial
+
+    async def route(self, text, context):
+        return {"complexity": "trivial" if self.trivial else "standard",
+                "requires_tools": not self.trivial}
+
+
+class FakePlanner:
+    def __init__(self, plan=None):
+        self.plan_value = plan or []
+        self.calls = 0
+
+    async def plan(self, text, context):
+        self.calls += 1
+        return list(self.plan_value)
+
+
+class FakeResponder:
+    async def summarize(self, text, state, context):
+        if state.failures:
+            return "⚠️ " + " ; ".join(state.failures.values())
+        return f"✅ {len(state.completed)} action(s) effectuée(s)."
+
+
+class FakeTranscriber:
+    def __init__(self, transcript, confidence):
+        self.transcript, self.confidence = transcript, confidence
+
+    async def transcribe(self, media_url):
+        return self.transcript, self.confidence
+
+
+def build(plan=None, trivial=False, transcriber=None):
+    tools = ToolRegistry()
+    sent = []
+
+    @tools.register("contacts.resolve")
+    async def _resolve(query: str = ""):
+        sent.append("resolve")
+        return {"email": "marc@exemple.fr"}
+
+    @tools.register("mail.draft")
+    async def _draft(to: str = "", subject: str = ""):
+        sent.append("draft")
+        return {"id": "d1", "to": to}
+
+    @tools.register("mail.send", mutating=True)
+    async def _send(draft_id: str = "", idempotency_key: str = ""):
+        sent.append("send")
+        return {"id": "sent-1"}
+
+    sender = RecordingSender()
+    pipe = Pipeline(
+        tools=tools,
+        router=FakeRouter(trivial),
+        planner=FakePlanner(plan),
+        responder=FakeResponder(),
+        sender=sender,
+        approvals=ApprovalRegistry(),
+        transcriber=transcriber,
+    )
+    return pipe, sender, sent
+
+
+def msg(text="fais un truc", kind="text", media_url=None):
+    return IncomingMessage("m1", "u1", "t1", "whatsapp", "33612345678",
+                           kind=kind, text=text, media_url=media_url)
+
+
+# --- chemin nominal --------------------------------------------------------
+
+def test_trivial_request_skips_planning():
+    pipe, sender, _ = build(trivial=True)
+    pipe.planner = FakePlanner()
+    run(pipe.handle(msg("bonjour"), T0))
+    assert pipe.planner.calls == 0
+    assert len(sender.sent) == 1
+
+
+def test_free_plan_runs_and_reports():
+    plan = [Task("T1", "contacts.resolve", {"query": "Marc"})]
+    pipe, sender, calls = build(plan)
+    run(pipe.handle(msg(), T0))
+    assert calls == ["resolve"]
+    assert "1 action" in sender.sent[0][1]
+
+
+# --- gate et reprise -------------------------------------------------------
+
+def gated_plan():
+    return [
+        Task("T1", "contacts.resolve", {"query": "Marc"}),
+        Task("T2", "mail.draft", {"to": "{{T1.email}}"}, depends_on=("T1",)),
+        Task("T3", "mail.send", {"draft_id": "{{T2.id}}"}, depends_on=("T2",)),
+    ]
+
+
+def test_outbound_action_suspends_and_asks():
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    assert "send" not in calls           # rien n'est parti
+    assert "Prêt à envoyer" in sender.sent[0][1]
+    assert pipe.approvals.get("t1", T0) is not None
+
+
+def test_ok_resumes_and_sends():
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("ok"), T0 + timedelta(minutes=1)))
+    assert "send" in calls
+    assert pipe.approvals.get("t1", T0) is None
+
+
+def test_resume_does_not_replay_completed_tasks():
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("ok"), T0 + timedelta(minutes=1)))
+    assert calls.count("resolve") == 1
+    assert calls.count("draft") == 1
+
+
+def test_non_resumes_cancels_without_sending():
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("non"), T0 + timedelta(minutes=1)))
+    assert "send" not in calls
+    assert "annulé" in sender.sent[-1][1]
+
+
+def test_ambiguous_reply_replans_instead_of_sending():
+    """« ok mais change l'objet » ne doit jamais partir tel quel."""
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("ok mais change l'objet"), T0 + timedelta(minutes=1)))
+    assert "send" not in calls
+    assert pipe.planner.calls == 2       # replanification
+
+
+def test_expired_approval_is_not_honoured():
+    """Un « ok » tapé une heure plus tard répond à autre chose."""
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("ok"), T0 + timedelta(minutes=31)))
+    assert "send" not in calls
+
+
+def test_only_one_pending_approval_per_thread():
+    pipe, _, _ = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    first = pipe.approvals.get("t1", T0)
+    run(pipe.handle(msg("autre demande"), T0 + timedelta(minutes=1)))
+    assert pipe.approvals.get("t1", T0) is not first
+    assert len(pipe.approvals.pending) == 1
+
+
+# --- vocal -----------------------------------------------------------------
+
+def test_confident_transcript_is_processed():
+    plan = [Task("T1", "contacts.resolve", {"query": "Marc"})]
+    pipe, sender, calls = build(plan, transcriber=FakeTranscriber("appelle Marc", 0.95))
+    run(pipe.handle(msg(kind="audio", text=None, media_url="https://x/a.ogg"), T0))
+    assert calls == ["resolve"]
+
+
+def test_low_confidence_asks_to_repeat_instead_of_guessing():
+    pipe, sender, calls = build([Task("T1", "contacts.resolve")],
+                                transcriber=FakeTranscriber("marmonnement", 0.3))
+    run(pipe.handle(msg(kind="audio", text=None, media_url="https://x/a.ogg"), T0))
+    assert calls == []
+    assert "répéter" in sender.sent[0][1]
+
+
+def test_empty_message_is_not_planned():
+    pipe, sender, _ = build([Task("T1", "contacts.resolve")])
+    run(pipe.handle(msg(""), T0))
+    assert pipe.planner.calls == 0
+
+
+# --- formatage WhatsApp ----------------------------------------------------
+
+def test_markdown_is_converted_to_whatsapp_syntax():
+    out = to_whatsapp("**gras** et *italique*")
+    assert "*gras*" in out
+    assert "_italique_" in out
+
+
+def test_headings_become_bold():
+    assert to_whatsapp("## Titre") == "*Titre*"
+
+
+def test_tables_are_flattened():
+    out = to_whatsapp("| Nom | Heure |\n|---|---|\n| Marc | 10h |")
+    assert "|" not in out
+    assert "Marc — 10h" in out
+
+
+def test_code_blocks_survive_conversion():
+    out = to_whatsapp("Voici `**du code**` intact")
+    assert "`**du code**`" in out
+
+
+def test_long_message_is_split_on_natural_boundaries():
+    text = "\n\n".join(f"Paragraphe {i} " + "x" * 200 for i in range(30))
+    chunks = split_message(text, limit=1000)
+    assert len(chunks) &gt; 1
+    assert all(len(c) &lt;= 1100 for c in chunks)
+    assert "(1/" in chunks[0]
+
+
+def test_short_message_is_not_split_or_numbered():
+    assert split_message("court") == ["court"]
+
+
+def test_desktop_keeps_rich_markdown():
+    rendered = ChannelFormatter("desktop").render("| a | b |\n|---|---|")
+    assert "|" in rendered[0]
+
+
+# --- worker ----------------------------------------------------------------
+
+def test_queues_are_distinct_per_priority():
+    names = {p.queue for p in Priority}
+    assert len(names) == 4
+    assert Priority.INTERACTIVE.queue != Priority.BACKGROUND.queue
+
+
+def test_resource_lock_is_scoped_per_user_and_resource():
+    assert resource_lock("u1", "primary") != resource_lock("u2", "primary")
+    assert resource_lock("u1", "primary") != resource_lock("u1", "work")
+
+'@
+Set-Content -Path 'core\tests\test_pipeline.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/tests/test_pipeline.py'
+
+$c = @'
+# Nova Core
+
+Backend agentique. Les clients (WhatsApp, Chrome, Desktop, Mobile) ne sont que des
+transports vers ce Core : ils envoient du texte ou de l'audio, ils reçoivent du
+texte et des événements. Toute la logique vit ici.
+
+Spécification complète : [`../docs/nova-spec.html`](../docs/nova-spec.html).
+
+## État d'avancement
+
+Ce qui est implémenté et couvert par des tests :
+
+| Module | Rôle |
+|---|---|
+| `core/planning.py` | Décomposition en DAG, couches parallélisables, résolution des références inter-tâches |
+| `core/gate.py` | Confirmation Gate — politique fermée par défaut, expiration, classification des réponses |
+| `core/contacts.py` | Résolution de contacts scorée, désambiguïsation obligatoire |
+| `core/graph/executor.py` | Exécution parallèle par couche, suspension avant action sortante, reprise |
+| `core/tools/registry.py` | Registre d'outils, résultats structurés, idempotence |
+| `core/providers/calendar.py` | Interface Google/Outlook, détection de conflits, créneaux libres |
+| `core/providers/google_calendar.py` | Provider Google réel : idempotence par id dérivé, sync incrémental, journées entières |
+| `core/integrations/google_oauth.py` | Flow OAuth, rafraîchissement, détection de révocation |
+| `core/integrations/http.py` | Retry avec backoff, `Retry-After`, quotas Google (403 = 429) |
+| `core/security/crypto.py` | Chiffrement AES-GCM des tokens OAuth, AAD anti-substitution |
+| `core/api/webhooks.py` | Signature HMAC, anti-rejeu, déduplication, normalisation Evolution |
+| `core/api/oauth.py` | State signé anti-CSRF, callback, refus de confusion de compte |
+| `core/store.py` | Store de jetons chiffré, expiration en clair |
+| `core/channels.py` | Appairage par code à 6 chiffres, usage unique, anti-force brute |
+| `core/pipeline.py` | Orchestration complète : transcription, routage, plan, gate, reprise |
+| `core/approvals.py` | Validations en attente, une par fil, expiration à 30 min |
+| `core/messaging.py` | Formatage WhatsApp, découpage 4096, envoi Evolution |
+| `core/workers.py` | Worker ARQ, files à priorités, verrous par ressource, cron |
+
+Ce qui reste à câbler, marqué `NotImplementedError` dans le code :
+
+- Les nœuds LLM réels : `Router`, `Planner` et `Responder` sont des protocoles,
+  leurs implémentations Anthropic restent à écrire
+- Le remplacement des registres en mémoire par les tables Postgres
+- Les migrations Alembic
+- Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
+
+
+
+## Démarrer
+
+```bash
+cd core
+pip install -e ".[dev]"
+pytest -q
+```
+
+Pile complète :
+
+```bash
+cp infra/.env.example infra/.env
+python -m core.security.crypto --generate   # → NOVA_MASTER_KEY
+docker compose -f infra/docker-compose.yml up
+```
+
+## Les trois invariants
+
+Ils ne sont pas négociables — chacun correspond à une panne réelle de ce type de système.
+
+**1. Le Confirmation Gate est fermé par défaut.** Un outil absent de `FREE_TOOLS`
+est traité comme irréversible. Ajouter un outil sortant sans y penser ne peut pas
+ouvrir de brèche silencieuse. Une réponse ambiguë (« ok mais change l'objet ») n'est
+jamais un accord.
+
+**2. Tout outil mutatif est idempotent.** La clé dérive de `task_id + tool + args`
+triés. Un timeout réseau suivi d'un retry ne crée pas trois réunions identiques.
+
+**3. Un contact ambigu bloque l'exécution.** Si le meilleur candidat score moins de
+0.85, ou si l'écart avec le suivant est inférieur à 0.15, l'agent demande. Envoyer un
+document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse commettre.
+
+## Tests
+
+137 tests, aucune dépendance réseau — `InMemoryCalendar` et le registre d'outils
+permettent d'exercer tout le graphe hors ligne.
+
+`FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et
+enregistre ce qui a été envoyé : les scénarios Google — 429 puis succès, 410 sur
+syncToken, 409 sur création rejouée — sont exercés sans réseau.
+
+Les cas qui comptent : `test_execution_suspends_before_sending` (rien ne part avant
+validation), `test_completed_tasks_are_not_replayed_on_resume`,
+`test_blob_cannot_be_moved_to_another_user`, `test_adjacent_events_do_not_conflict`,
+`test_conflict_on_retry_is_treated_as_success`, `test_refresh_preserves_the_refresh_token`,
+`test_all_day_events_are_not_read_as_timestamps`, `test_callback_refuses_account_confusion`,
+`test_brute_force_burns_the_code`, `test_tokens_are_never_written_in_clear`,
+`test_ambiguous_reply_replans_instead_of_sending`, `test_expired_approval_is_not_honoured`,
+`test_low_confidence_asks_to_repeat_instead_of_guessing`.
+
+## Le provider Google en trois points non devinables
+
+**Idempotence par l'identifiant.** L'API Calendar n'a pas d'en-tête d'idempotence.
+On impose donc l'`id` de l'événement, dérivé de la clé — et un 409 « existe déjà »
+est traité comme un succès, pas comme une erreur. Sans cela, un retry après timeout
+remonte un échec pour un rendez-vous bel et bien créé.
+
+**Le syncToken expire.** Google répond alors 410 GONE. Ne pas gérer ce cas fige la
+synchronisation définitivement, sans erreur visible.
+
+**403 ne veut pas dire « interdit ».** Sur dépassement de quota, Google renvoie
+parfois 403 avec `reason: rateLimitExceeded` au lieu de 429. Le confondre avec un
+refus de permission fait abandonner un appel qui aurait réussi au second essai.
+
+'@
+Set-Content -Path 'core\README.md' -Value $c -Encoding utf8
+Write-Host '  ecrit core/README.md'
+
+Write-Host ''
+Write-Host '6 fichiers ecrits.' -ForegroundColor Green
+Write-Host 'Etape suivante :' -ForegroundColor Cyan
+Write-Host '  git add . ; git commit -m "Implement the message pipeline and ARQ worker" ; git push'</code></pre>
+</section>
+
+<h2>Les fichiers, un par un</h2>
+<p>En dernier recours, si le script ne passe pas.</p>
+
+<section class="file">
+  <div class="file-head"><code class="path">core/core/pipeline.py</code>
+    <button class="copy" data-target="f0">Copier</button></div>
+  <pre id="f0"><code>"""Le pipeline complet : d'un message entrant à une action accomplie.
+
+Ordre de traitement, et pourquoi il est dans cet ordre :
+
+1. **Reprise de validation d'abord.** Si un « ok » est attendu sur ce fil, il
+   doit être interprété comme tel — pas replanifié comme une nouvelle demande.
+   Inverser ces deux étapes fait qu'un « ok » relance une planification vide.
+2. **Transcription.** Un vocal mal transcrit vaut mieux refusé que deviné : sous
+   le seuil de confiance, on demande de répéter plutôt que d'agir à l'aveugle.
+3. **Routage.** Les requêtes triviales n'ont pas besoin du gros modèle.
+4. **Planification, exécution, gate, réponse.**
+
+Les dépendances lourdes — modèle de langage, transcription, envoi — sont des
+protocoles injectés. Le pipeline se teste donc entièrement hors ligne.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Protocol
+
+from .approvals import ApprovalRegistry, PendingApproval
+from .gate import classify_reply, format_approval_summary
+from .graph.executor import ExecutionState, execute_plan
+from .messaging import ChannelFormatter, Sender
+from .planning import PlanError, Task
+from .tools.registry import ToolRegistry
+
+#: En dessous, la transcription n'est pas exploitable.
+MIN_TRANSCRIPT_CONFIDENCE = 0.6
+
+
+@dataclass
+class IncomingMessage:
+    id: str
+    user_id: str
+    thread_id: str
+    channel: str
+    from_id: str
+    kind: str = "text"  # text | audio | image
+    text: str | None = None
+    media_url: str | None = None
+
+
+class Transcriber(Protocol):
+    async def transcribe(self, media_url: str) -&gt; tuple[str, float]: ...
+
+
+class Router(Protocol):
+    async def route(self, text: str, context: dict) -&gt; dict: ...
+
+
+class Planner(Protocol):
+    async def plan(self, text: str, context: dict) -&gt; list[Task]: ...
+
+
+class Responder(Protocol):
+    async def summarize(self, text: str, state: ExecutionState, context: dict) -&gt; str: ...
+
+
+@dataclass
+class Pipeline:
+    tools: ToolRegistry
+    router: Router
+    planner: Planner
+    responder: Responder
+    sender: Sender
+    approvals: ApprovalRegistry = field(default_factory=ApprovalRegistry)
+    transcriber: Transcriber | None = None
+
+    async def handle(self, message: IncomingMessage, now: datetime | None = None) -&gt; str:
+        """Traite un message et renvoie ce qui a été envoyé à l'utilisateur."""
+        now = now or datetime.now(timezone.utc)
+        formatter = ChannelFormatter(message.channel)
+
+        text = await self._resolve_text(message)
+        if text is None:
+            return await self._reply(message, formatter, "🎤 Je n'ai pas bien saisi, tu peux répéter ?")
+
+        pending = self.approvals.get(message.thread_id, now)
+        if pending is not None:
+            return await self._resume(message, formatter, pending, text, now)
+
+        return await self._fresh_request(message, formatter, text, now)
+
+    # --- étapes ----------------------------------------------------------
+
+    async def _resolve_text(self, message: IncomingMessage) -&gt; str | None:
+        if message.kind != "audio":
+            return (message.text or "").strip() or None
+        if self.transcriber is None or not message.media_url:
+            return None
+        transcript, confidence = await self.transcriber.transcribe(message.media_url)
+        if confidence &lt; MIN_TRANSCRIPT_CONFIDENCE or not transcript.strip():
+            return None
+        return transcript.strip()
+
+    async def _resume(
+        self,
+        message: IncomingMessage,
+        formatter: ChannelFormatter,
+        pending: PendingApproval,
+        text: str,
+        now: datetime,
+    ) -&gt; str:
+        decision = classify_reply(text)
+
+        if decision == "reject":
+            self.approvals.pop(message.thread_id, now)
+            return await self._reply(message, formatter, "OK, annulé.")
+
+        if decision == "edit":
+            # L'utilisateur veut autre chose : on abandonne le plan suspendu et
+            # on replanifie à partir de sa correction, plutôt que de deviner.
+            self.approvals.pop(message.thread_id, now)
+            return await self._fresh_request(message, formatter, text, now)
+
+        self.approvals.pop(message.thread_id, now)
+        state = ExecutionState(
+            results=dict(pending.results), completed=list(pending.completed)
+        )
+        state = await execute_plan(
+            pending.plan, self.tools, state, approved_task_ids=frozenset({pending.task.id})
+        )
+        return await self._finish(message, formatter, text, state, now)
+
+    async def _fresh_request(
+        self,
+        message: IncomingMessage,
+        formatter: ChannelFormatter,
+        text: str,
+        now: datetime,
+    ) -&gt; str:
+        context = {"channel": message.channel, "user_id": message.user_id, "now": now}
+
+        decision = await self.router.route(text, context)
+        if decision.get("complexity") == "trivial" and not decision.get("requires_tools"):
+            answer = await self.responder.summarize(text, ExecutionState(), context)
+            return await self._reply(message, formatter, answer)
+
+        try:
+            plan = await self.planner.plan(text, context)
+        except PlanError as exc:
+            return await self._reply(message, formatter, f"⚠️ Je n'ai pas pu construire le plan : {exc}")
+
+        if not plan:
+            answer = await self.responder.summarize(text, ExecutionState(), context)
+            return await self._reply(message, formatter, answer)
+
+        state = await execute_plan(plan, self.tools)
+        return await self._finish(message, formatter, text, state, now, plan)
+
+    async def _finish(
+        self,
+        message: IncomingMessage,
+        formatter: ChannelFormatter,
+        text: str,
+        state: ExecutionState,
+        now: datetime,
+        plan: list[Task] | None = None,
+    ) -&gt; str:
+        if state.suspended:
+            approval = state.pending_approval
+            assert approval is not None
+            summary = format_approval_summary(approval.task, approval.prepared)
+            self.approvals.put(
+                PendingApproval(
+                    thread_id=message.thread_id,
+                    user_id=message.user_id,
+                    task=approval.task,
+                    plan=plan or [],
+                    results=dict(state.results),
+                    completed=list(state.completed),
+                    summary=summary,
+                    requested_at=now,
+                )
+            )
+            return await self._reply(message, formatter, summary)
+
+        context = {"channel": message.channel, "user_id": message.user_id, "now": now}
+        answer = await self.responder.summarize(text, state, context)
+        return await self._reply(message, formatter, answer)
+
+    async def _reply(self, message: IncomingMessage, formatter: ChannelFormatter, body: str) -&gt; str:
+        for chunk in formatter.render(body):
+            await self.sender.send_text(message.from_id, chunk)
+        return body
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head"><code class="path">core/core/approvals.py</code>
+    <button class="copy" data-target="f1">Copier</button></div>
+  <pre id="f1"><code>"""Validations en attente — l'état qui survit entre deux messages.
+
+Quand l'exécuteur suspend un plan devant une action sortante, il faut conserver
+de quoi reprendre : le plan, les résultats déjà obtenus, et la tâche à valider.
+Ce registre porte cet état, indexé par fil de conversation.
+
+Deux règles qui évitent des dégâts réels :
+
+- **Une seule validation en attente par fil.** Sinon un « ok » ambigu pourrait
+  valider une action que l'utilisateur croyait abandonnée.
+- **Expiration à 30 minutes.** Un « ok » tapé une heure plus tard répond à autre
+  chose. L'agent ne relance pas, et la validation périmée est refusée.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
+from .gate import APPROVAL_TTL, is_expired
+from .planning import Task
+
+
+@dataclass
+class PendingApproval:
+    thread_id: str
+    user_id: str
+    task: Task
+    plan: list[Task]
+    results: dict[str, Any]
+    completed: list[str]
+    summary: str
+    requested_at: datetime
+
+    def expired(self, now: datetime | None = None) -&gt; bool:
+        return is_expired(self.requested_at, now)
+
+
+@dataclass
+class ApprovalRegistry:
+    """En mémoire ici ; table `approvals` + checkpoint LangGraph en production."""
+
+    pending: dict[str, PendingApproval] = field(default_factory=dict)
+
+    def put(self, approval: PendingApproval) -&gt; None:
+        # Remplace toute validation antérieure sur ce fil : une seule à la fois.
+        self.pending[approval.thread_id] = approval
+
+    def get(self, thread_id: str, now: datetime | None = None) -&gt; PendingApproval | None:
+        approval = self.pending.get(thread_id)
+        if approval is None:
+            return None
+        if approval.expired(now):
+            del self.pending[thread_id]
+            return None
+        return approval
+
+    def pop(self, thread_id: str, now: datetime | None = None) -&gt; PendingApproval | None:
+        approval = self.get(thread_id, now)
+        if approval is not None:
+            del self.pending[thread_id]
+        return approval
+
+    def purge(self, now: datetime | None = None) -&gt; int:
+        now = now or datetime.now(timezone.utc)
+        stale = [tid for tid, a in self.pending.items() if a.expired(now)]
+        for tid in stale:
+            del self.pending[tid]
+        return len(stale)
+
+
+def ttl_minutes() -&gt; int:
+    return int(APPROVAL_TTL.total_seconds() // 60)
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head"><code class="path">core/core/messaging.py</code>
+    <button class="copy" data-target="f2">Copier</button></div>
+  <pre id="f2"><code>"""Formatage et envoi sortants — adapter la réponse au canal.
+
+WhatsApp n'est pas un terminal : pas de tableaux, pas de titres, une syntaxe de
+gras qui lui est propre, et une limite dure à 4096 caractères par message. Une
+réponse pensée pour le dashboard y devient illisible.
+
+Le découpage se fait sur les frontières naturelles du texte — paragraphe, puis
+ligne, puis phrase — parce qu'une coupure au milieu d'un mot dans un message de
+confirmation donne l'impression que l'agent a planté.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Protocol
+
+WHATSAPP_LIMIT = 4096
+SAFE_CHUNK = 3900  # marge pour le suffixe de pagination
+
+
+class Sender(Protocol):
+    async def send_text(self, to: str, body: str) -&gt; None: ...
+
+
+def to_whatsapp(markdown: str) -&gt; str:
+    """Convertit le markdown courant vers la syntaxe WhatsApp.
+
+    `**gras**` → `*gras*`, `*italique*` → `_italique_`. Les titres deviennent du
+    gras, les tableaux sont aplatis : WhatsApp les rend en bouillie sinon.
+    """
+    text = markdown.strip()
+
+    # Protéger les blocs de code avant toute substitution.
+    blocks: list[str] = []
+
+    def stash(match: re.Match) -&gt; str:
+        blocks.append(match.group(0))
+        return f"\x00{len(blocks) - 1}\x00"
+
+    text = re.sub(r"```.*?```", stash, text, flags=re.S)
+    text = re.sub(r"`[^`\n]+`", stash, text)
+
+    # Titres et gras passent par le marqueur § : écrire directement `*...*` ici
+    # ferait retomber le résultat dans la règle d'italique juste en dessous.
+    text = re.sub(r"^#{1,6}\s*(.+)$", r"§\1§", text, flags=re.M)   # titres → gras
+    text = re.sub(r"\*\*(.+?)\*\*", r"§\1§", text)                  # gras md → marqueur
+    text = re.sub(r"(?&lt;!\*)\*(?!\*)(.+?)(?&lt;!\*)\*(?!\*)", r"_\1_", text)  # italique
+    text = text.replace("§", "*")                                   # marqueur → gras WA
+    text = re.sub(r"^\s*[-•]\s+", "• ", text, flags=re.M)           # puces
+    text = re.sub(r"^\s*\|.*\|\s*$", _flatten_row, text, flags=re.M)  # tableaux
+    text = re.sub(r"^\s*\|?[-: |]+\|?\s*$", "", text, flags=re.M)   # séparateurs
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    for i, block in enumerate(blocks):
+        text = text.replace(f"\x00{i}\x00", block.replace("```", "```"))
+    return text.strip()
+
+
+def _flatten_row(match: re.Match) -&gt; str:
+    cells = [c.strip() for c in match.group(0).strip().strip("|").split("|")]
+    return " — ".join(c for c in cells if c)
+
+
+def split_message(text: str, limit: int = SAFE_CHUNK) -&gt; list[str]:
+    """Découpe sur les frontières naturelles, jamais au milieu d'un mot."""
+    if len(text) &lt;= limit:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = text
+    while len(remaining) &gt; limit:
+        window = remaining[:limit]
+        cut = max(window.rfind("\n\n"), window.rfind("\n"), window.rfind(". "))
+        if cut &lt;= 0:
+            cut = window.rfind(" ")
+        if cut &lt;= 0:
+            cut = limit  # mot unique plus long que la limite : coupure forcée
+        chunks.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+    if remaining:
+        chunks.append(remaining)
+
+    total = len(chunks)
+    return [f"{c}\n({i}/{total})" for i, c in enumerate(chunks, 1)]
+
+
+@dataclass
+class ChannelFormatter:
+    """Applique les règles de longueur et de format propres à chaque canal."""
+
+    channel: str
+
+    def render(self, markdown: str) -&gt; list[str]:
+        if self.channel == "whatsapp":
+            return split_message(to_whatsapp(markdown))
+        # Desktop, mobile et Chrome affichent du markdown riche.
+        return [markdown.strip()]
+
+
+@dataclass
+class EvolutionSender:
+    """Envoi via Evolution API. Le transport est injecté, donc testable."""
+
+    transport: object
+    base_url: str
+    instance: str
+    api_key: str
+
+    async def send_text(self, to: str, body: str) -&gt; None:
+        from .integrations.http import request_with_retry
+
+        await request_with_retry(
+            self.transport,
+            "POST",
+            f"{self.base_url}/message/sendText/{self.instance}",
+            headers={"apikey": self.api_key},
+            json={"number": to, "text": body},
+        )
+
+    async def send_typing(self, to: str) -&gt; None:
+        """Indicateur « en train d'écrire » : l'utilisateur sait que ça travaille."""
+        from .integrations.http import request_with_retry
+
+        await request_with_retry(
+            self.transport,
+            "POST",
+            f"{self.base_url}/chat/sendPresence/{self.instance}",
+            headers={"apikey": self.api_key},
+            json={"number": to, "presence": "composing"},
+        )
+
+
+@dataclass
+class RecordingSender:
+    """Double de test : conserve ce qui aurait été envoyé."""
+
+    sent: list[tuple[str, str]] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -&gt; None:
+        if self.sent is None:
+            self.sent = []
+
+    async def send_text(self, to: str, body: str) -&gt; None:
+        self.sent.append((to, body))
+
+    async def send_typing(self, to: str) -&gt; None:
+        pass
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head"><code class="path">core/core/workers.py</code>
+    <button class="copy" data-target="f3">Copier</button></div>
+  <pre id="f3"><code>"""Worker ARQ — files à priorités et tâches périodiques.
+
+Un rapport hebdomadaire de trois minutes ne doit jamais retarder un « quelle
+heure est mon RDV ». D'où des files séparées, consommées par des pools distincts :
+
+    P0  interactif   — requête utilisateur en cours de conversation
+    P1  &lt; 1 min      — suivi, envoi confirmé
+    P2  &lt; 15 min     — synchronisation, triage, indexation mémoire
+    P3  best effort  — résumés longs, rapports
+
+Un seul pool partagé suffirait fonctionnellement, mais une tâche lente y bloque
+la file entière : c'est précisément ce qu'on veut éviter côté latence perçue.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from enum import IntEnum
+
+log = logging.getLogger("nova.worker")
+
+
+class Priority(IntEnum):
+    INTERACTIVE = 0
+    FOLLOW_UP = 1
+    BACKGROUND = 2
+    BEST_EFFORT = 3
+
+    @property
+    def queue(self) -&gt; str:
+        return f"nova:p{int(self)}"
+
+
+#: Verrou par ressource : deux créations concurrentes sur le même agenda
+#: produisent des doublons que l'idempotence seule ne rattrape pas, puisque
+#: les clés diffèrent.
+def resource_lock(user_id: str, resource: str) -&gt; str:
+    return f"nova:lock:{user_id}:{resource}"
+
+
+@dataclass
+class JobContext:
+    """Dépendances injectées dans les jobs au démarrage du worker."""
+
+    pipeline: object
+    registry: object
+    approvals: object
+
+
+async def handle_message_job(ctx: dict, user_id: str, payload: dict) -&gt; str:
+    """Job P0 : traite un message entrant de bout en bout."""
+    from .pipeline import IncomingMessage
+
+    deps: JobContext = ctx["deps"]
+    message = IncomingMessage(
+        id=payload["id"],
+        user_id=user_id,
+        thread_id=payload.get("thread_id") or f"{payload['channel']}:{payload['from_id']}",
+        channel=payload["channel"],
+        from_id=payload["from_id"],
+        kind=payload.get("kind", "text"),
+        text=payload.get("text"),
+        media_url=payload.get("media_url"),
+    )
+    return await deps.pipeline.handle(message)
+
+
+async def purge_approvals_job(ctx: dict) -&gt; int:
+    """Job P2 : retire les validations périmées. L'agent ne relance jamais."""
+    deps: JobContext = ctx["deps"]
+    removed = deps.approvals.purge()
+    if removed:
+        log.info("%d validation(s) expirée(s) purgée(s)", removed)
+    return removed
+
+
+async def sync_calendars_job(ctx: dict, user_id: str) -&gt; int:
+    """Job P2 : synchronisation incrémentale, avec resync complet sur 410."""
+    from .providers.google_calendar import SyncTokenExpired
+
+    deps: JobContext = ctx["deps"]
+    provider = getattr(deps, "calendar_provider", None)
+    if provider is None:
+        return 0
+    try:
+        result = await provider.sync(sync_token=ctx.get("sync_token"))
+    except SyncTokenExpired:
+        log.info("syncToken expiré, resynchronisation complète")
+        result = await provider.sync(sync_token=None)
+    ctx["sync_token"] = result.next_sync_token
+    return len(result.events)
+
+
+async def startup(ctx: dict) -&gt; None:
+    log.info("worker démarré")
+
+
+async def shutdown(ctx: dict) -&gt; None:
+    log.info("worker arrêté")
+
+
+class WorkerSettings:
+    """Configuration ARQ. Lancement : `arq core.workers.WorkerSettings`.
+
+    `max_tries` et `retry_delay` valent pour les erreurs transitoires ; les
+    erreurs métier ne sont pas rejouées — un plan invalide le restera.
+    """
+
+    functions = [handle_message_job, purge_approvals_job, sync_calendars_job]
+    on_startup = startup
+    on_shutdown = shutdown
+    queue_name = Priority.INTERACTIVE.queue
+    max_jobs = 10
+    job_timeout = 120
+    max_tries = 3
+    keep_result = 3600
+
+    @staticmethod
+    def cron_jobs():
+        """Tâches périodiques. Importé paresseusement : arq est optionnel en test."""
+        from arq import cron  # noqa: PLC0415
+
+        return [
+            cron(purge_approvals_job, minute={0, 15, 30, 45}),
+            cron(sync_calendars_job, minute={5, 20, 35, 50}),
+        ]
+
+
+class BackgroundWorkerSettings(WorkerSettings):
+    """Pool séparé pour P2/P3 : une tâche lente n'y bloque pas l'interactif."""
+
+    queue_name = Priority.BACKGROUND.queue
+    max_jobs = 4
+    job_timeout = 600
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head"><code class="path">core/tests/test_pipeline.py</code>
+    <button class="copy" data-target="f4">Copier</button></div>
+  <pre id="f4"><code>import asyncio
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from core.approvals import ApprovalRegistry
+from core.messaging import ChannelFormatter, RecordingSender, split_message, to_whatsapp
+from core.pipeline import IncomingMessage, Pipeline
+from core.planning import Task
+from core.tools.registry import ToolRegistry
+from core.workers import Priority, resource_lock
+
+T0 = datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+# --- doubles ---------------------------------------------------------------
+
+class FakeRouter:
+    def __init__(self, trivial=False):
+        self.trivial = trivial
+
+    async def route(self, text, context):
+        return {"complexity": "trivial" if self.trivial else "standard",
+                "requires_tools": not self.trivial}
+
+
+class FakePlanner:
+    def __init__(self, plan=None):
+        self.plan_value = plan or []
+        self.calls = 0
+
+    async def plan(self, text, context):
+        self.calls += 1
+        return list(self.plan_value)
+
+
+class FakeResponder:
+    async def summarize(self, text, state, context):
+        if state.failures:
+            return "⚠️ " + " ; ".join(state.failures.values())
+        return f"✅ {len(state.completed)} action(s) effectuée(s)."
+
+
+class FakeTranscriber:
+    def __init__(self, transcript, confidence):
+        self.transcript, self.confidence = transcript, confidence
+
+    async def transcribe(self, media_url):
+        return self.transcript, self.confidence
+
+
+def build(plan=None, trivial=False, transcriber=None):
+    tools = ToolRegistry()
+    sent = []
+
+    @tools.register("contacts.resolve")
+    async def _resolve(query: str = ""):
+        sent.append("resolve")
+        return {"email": "marc@exemple.fr"}
+
+    @tools.register("mail.draft")
+    async def _draft(to: str = "", subject: str = ""):
+        sent.append("draft")
+        return {"id": "d1", "to": to}
+
+    @tools.register("mail.send", mutating=True)
+    async def _send(draft_id: str = "", idempotency_key: str = ""):
+        sent.append("send")
+        return {"id": "sent-1"}
+
+    sender = RecordingSender()
+    pipe = Pipeline(
+        tools=tools,
+        router=FakeRouter(trivial),
+        planner=FakePlanner(plan),
+        responder=FakeResponder(),
+        sender=sender,
+        approvals=ApprovalRegistry(),
+        transcriber=transcriber,
+    )
+    return pipe, sender, sent
+
+
+def msg(text="fais un truc", kind="text", media_url=None):
+    return IncomingMessage("m1", "u1", "t1", "whatsapp", "33612345678",
+                           kind=kind, text=text, media_url=media_url)
+
+
+# --- chemin nominal --------------------------------------------------------
+
+def test_trivial_request_skips_planning():
+    pipe, sender, _ = build(trivial=True)
+    pipe.planner = FakePlanner()
+    run(pipe.handle(msg("bonjour"), T0))
+    assert pipe.planner.calls == 0
+    assert len(sender.sent) == 1
+
+
+def test_free_plan_runs_and_reports():
+    plan = [Task("T1", "contacts.resolve", {"query": "Marc"})]
+    pipe, sender, calls = build(plan)
+    run(pipe.handle(msg(), T0))
+    assert calls == ["resolve"]
+    assert "1 action" in sender.sent[0][1]
+
+
+# --- gate et reprise -------------------------------------------------------
+
+def gated_plan():
+    return [
+        Task("T1", "contacts.resolve", {"query": "Marc"}),
+        Task("T2", "mail.draft", {"to": "{{T1.email}}"}, depends_on=("T1",)),
+        Task("T3", "mail.send", {"draft_id": "{{T2.id}}"}, depends_on=("T2",)),
+    ]
+
+
+def test_outbound_action_suspends_and_asks():
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    assert "send" not in calls           # rien n'est parti
+    assert "Prêt à envoyer" in sender.sent[0][1]
+    assert pipe.approvals.get("t1", T0) is not None
+
+
+def test_ok_resumes_and_sends():
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("ok"), T0 + timedelta(minutes=1)))
+    assert "send" in calls
+    assert pipe.approvals.get("t1", T0) is None
+
+
+def test_resume_does_not_replay_completed_tasks():
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("ok"), T0 + timedelta(minutes=1)))
+    assert calls.count("resolve") == 1
+    assert calls.count("draft") == 1
+
+
+def test_non_resumes_cancels_without_sending():
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("non"), T0 + timedelta(minutes=1)))
+    assert "send" not in calls
+    assert "annulé" in sender.sent[-1][1]
+
+
+def test_ambiguous_reply_replans_instead_of_sending():
+    """« ok mais change l'objet » ne doit jamais partir tel quel."""
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("ok mais change l'objet"), T0 + timedelta(minutes=1)))
+    assert "send" not in calls
+    assert pipe.planner.calls == 2       # replanification
+
+
+def test_expired_approval_is_not_honoured():
+    """Un « ok » tapé une heure plus tard répond à autre chose."""
+    pipe, sender, calls = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    run(pipe.handle(msg("ok"), T0 + timedelta(minutes=31)))
+    assert "send" not in calls
+
+
+def test_only_one_pending_approval_per_thread():
+    pipe, _, _ = build(gated_plan())
+    run(pipe.handle(msg(), T0))
+    first = pipe.approvals.get("t1", T0)
+    run(pipe.handle(msg("autre demande"), T0 + timedelta(minutes=1)))
+    assert pipe.approvals.get("t1", T0) is not first
+    assert len(pipe.approvals.pending) == 1
+
+
+# --- vocal -----------------------------------------------------------------
+
+def test_confident_transcript_is_processed():
+    plan = [Task("T1", "contacts.resolve", {"query": "Marc"})]
+    pipe, sender, calls = build(plan, transcriber=FakeTranscriber("appelle Marc", 0.95))
+    run(pipe.handle(msg(kind="audio", text=None, media_url="https://x/a.ogg"), T0))
+    assert calls == ["resolve"]
+
+
+def test_low_confidence_asks_to_repeat_instead_of_guessing():
+    pipe, sender, calls = build([Task("T1", "contacts.resolve")],
+                                transcriber=FakeTranscriber("marmonnement", 0.3))
+    run(pipe.handle(msg(kind="audio", text=None, media_url="https://x/a.ogg"), T0))
+    assert calls == []
+    assert "répéter" in sender.sent[0][1]
+
+
+def test_empty_message_is_not_planned():
+    pipe, sender, _ = build([Task("T1", "contacts.resolve")])
+    run(pipe.handle(msg(""), T0))
+    assert pipe.planner.calls == 0
+
+
+# --- formatage WhatsApp ----------------------------------------------------
+
+def test_markdown_is_converted_to_whatsapp_syntax():
+    out = to_whatsapp("**gras** et *italique*")
+    assert "*gras*" in out
+    assert "_italique_" in out
+
+
+def test_headings_become_bold():
+    assert to_whatsapp("## Titre") == "*Titre*"
+
+
+def test_tables_are_flattened():
+    out = to_whatsapp("| Nom | Heure |\n|---|---|\n| Marc | 10h |")
+    assert "|" not in out
+    assert "Marc — 10h" in out
+
+
+def test_code_blocks_survive_conversion():
+    out = to_whatsapp("Voici `**du code**` intact")
+    assert "`**du code**`" in out
+
+
+def test_long_message_is_split_on_natural_boundaries():
+    text = "\n\n".join(f"Paragraphe {i} " + "x" * 200 for i in range(30))
+    chunks = split_message(text, limit=1000)
+    assert len(chunks) &gt; 1
+    assert all(len(c) &lt;= 1100 for c in chunks)
+    assert "(1/" in chunks[0]
+
+
+def test_short_message_is_not_split_or_numbered():
+    assert split_message("court") == ["court"]
+
+
+def test_desktop_keeps_rich_markdown():
+    rendered = ChannelFormatter("desktop").render("| a | b |\n|---|---|")
+    assert "|" in rendered[0]
+
+
+# --- worker ----------------------------------------------------------------
+
+def test_queues_are_distinct_per_priority():
+    names = {p.queue for p in Priority}
+    assert len(names) == 4
+    assert Priority.INTERACTIVE.queue != Priority.BACKGROUND.queue
+
+
+def test_resource_lock_is_scoped_per_user_and_resource():
+    assert resource_lock("u1", "primary") != resource_lock("u2", "primary")
+    assert resource_lock("u1", "primary") != resource_lock("u1", "work")
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head"><code class="path">core/README.md</code>
+    <button class="copy" data-target="f5">Copier</button></div>
+  <pre id="f5"><code># Nova Core
+
+Backend agentique. Les clients (WhatsApp, Chrome, Desktop, Mobile) ne sont que des
+transports vers ce Core : ils envoient du texte ou de l'audio, ils reçoivent du
+texte et des événements. Toute la logique vit ici.
+
+Spécification complète : [`../docs/nova-spec.html`](../docs/nova-spec.html).
+
+## État d'avancement
+
+Ce qui est implémenté et couvert par des tests :
+
+| Module | Rôle |
+|---|---|
+| `core/planning.py` | Décomposition en DAG, couches parallélisables, résolution des références inter-tâches |
+| `core/gate.py` | Confirmation Gate — politique fermée par défaut, expiration, classification des réponses |
+| `core/contacts.py` | Résolution de contacts scorée, désambiguïsation obligatoire |
+| `core/graph/executor.py` | Exécution parallèle par couche, suspension avant action sortante, reprise |
+| `core/tools/registry.py` | Registre d'outils, résultats structurés, idempotence |
+| `core/providers/calendar.py` | Interface Google/Outlook, détection de conflits, créneaux libres |
+| `core/providers/google_calendar.py` | Provider Google réel : idempotence par id dérivé, sync incrémental, journées entières |
+| `core/integrations/google_oauth.py` | Flow OAuth, rafraîchissement, détection de révocation |
+| `core/integrations/http.py` | Retry avec backoff, `Retry-After`, quotas Google (403 = 429) |
+| `core/security/crypto.py` | Chiffrement AES-GCM des tokens OAuth, AAD anti-substitution |
+| `core/api/webhooks.py` | Signature HMAC, anti-rejeu, déduplication, normalisation Evolution |
+| `core/api/oauth.py` | State signé anti-CSRF, callback, refus de confusion de compte |
+| `core/store.py` | Store de jetons chiffré, expiration en clair |
+| `core/channels.py` | Appairage par code à 6 chiffres, usage unique, anti-force brute |
+| `core/pipeline.py` | Orchestration complète : transcription, routage, plan, gate, reprise |
+| `core/approvals.py` | Validations en attente, une par fil, expiration à 30 min |
+| `core/messaging.py` | Formatage WhatsApp, découpage 4096, envoi Evolution |
+| `core/workers.py` | Worker ARQ, files à priorités, verrous par ressource, cron |
+
+Ce qui reste à câbler, marqué `NotImplementedError` dans le code :
+
+- Les nœuds LLM réels : `Router`, `Planner` et `Responder` sont des protocoles,
+  leurs implémentations Anthropic restent à écrire
+- Le remplacement des registres en mémoire par les tables Postgres
+- Les migrations Alembic
+- Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
+
+
+
+## Démarrer
+
+```bash
+cd core
+pip install -e ".[dev]"
+pytest -q
+```
+
+Pile complète :
+
+```bash
+cp infra/.env.example infra/.env
+python -m core.security.crypto --generate   # → NOVA_MASTER_KEY
+docker compose -f infra/docker-compose.yml up
+```
+
+## Les trois invariants
+
+Ils ne sont pas négociables — chacun correspond à une panne réelle de ce type de système.
+
+**1. Le Confirmation Gate est fermé par défaut.** Un outil absent de `FREE_TOOLS`
+est traité comme irréversible. Ajouter un outil sortant sans y penser ne peut pas
+ouvrir de brèche silencieuse. Une réponse ambiguë (« ok mais change l'objet ») n'est
+jamais un accord.
+
+**2. Tout outil mutatif est idempotent.** La clé dérive de `task_id + tool + args`
+triés. Un timeout réseau suivi d'un retry ne crée pas trois réunions identiques.
+
+**3. Un contact ambigu bloque l'exécution.** Si le meilleur candidat score moins de
+0.85, ou si l'écart avec le suivant est inférieur à 0.15, l'agent demande. Envoyer un
+document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse commettre.
+
+## Tests
+
+137 tests, aucune dépendance réseau — `InMemoryCalendar` et le registre d'outils
+permettent d'exercer tout le graphe hors ligne.
+
+`FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et
+enregistre ce qui a été envoyé : les scénarios Google — 429 puis succès, 410 sur
+syncToken, 409 sur création rejouée — sont exercés sans réseau.
+
+Les cas qui comptent : `test_execution_suspends_before_sending` (rien ne part avant
+validation), `test_completed_tasks_are_not_replayed_on_resume`,
+`test_blob_cannot_be_moved_to_another_user`, `test_adjacent_events_do_not_conflict`,
+`test_conflict_on_retry_is_treated_as_success`, `test_refresh_preserves_the_refresh_token`,
+`test_all_day_events_are_not_read_as_timestamps`, `test_callback_refuses_account_confusion`,
+`test_brute_force_burns_the_code`, `test_tokens_are_never_written_in_clear`,
+`test_ambiguous_reply_replans_instead_of_sending`, `test_expired_approval_is_not_honoured`,
+`test_low_confidence_asks_to_repeat_instead_of_guessing`.
+
+## Le provider Google en trois points non devinables
+
+**Idempotence par l'identifiant.** L'API Calendar n'a pas d'en-tête d'idempotence.
+On impose donc l'`id` de l'événement, dérivé de la clé — et un 409 « existe déjà »
+est traité comme un succès, pas comme une erreur. Sans cela, un retry après timeout
+remonte un échec pour un rendez-vous bel et bien créé.
+
+**Le syncToken expire.** Google répond alors 410 GONE. Ne pas gérer ce cas fige la
+synchronisation définitivement, sans erreur visible.
+
+**403 ne veut pas dire « interdit ».** Sur dépassement de quota, Google renvoie
+parfois 403 avec `reason: rateLimitExceeded` au lieu de 429. Le confondre avec un
+refus de permission fait abandonner un appel qui aurait réussi au second essai.
+</code></pre>
+</section>
+</div>
+
+<script>
+function copyFrom(el, btn, label) {
+  navigator.clipboard.writeText(el.innerText).then(function () {
+    const old = btn.textContent; btn.textContent = label; btn.classList.add('done');
+    setTimeout(function () { btn.textContent = old; btn.classList.remove('done'); }, 2200);
+  }).catch(function () { btn.textContent = 'Sélectionne et Ctrl+C'; });
+}
+document.getElementById('copyScript').addEventListener('click', function () {
+  copyFrom(document.getElementById('script'), this, 'Copié — colle dans PowerShell');
+});
+document.querySelectorAll('.copy').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    copyFrom(document.getElementById(btn.dataset.target), btn, 'Copié');
+  });
+});
+</script>
