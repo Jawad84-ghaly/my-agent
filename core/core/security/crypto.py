@@ -74,4 +74,4 @@ if __name__ == "__main__":  # pragma: no cover
     if "--generate" in sys.argv:
         print(generate_key())
     else:
-        print(f"usage: python -m core.security.crypto --generate")
+        print("usage: python -m core.security.crypto --generate")

@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from core.graph.executor import ExecutionState, execute_plan, summarize
+from core.graph.executor import execute_plan, summarize
 from core.planning import Task
 from core.tools.registry import ToolRegistry, idempotency_key
 
