@@ -30,11 +30,11 @@ Ce qui est implémenté et couvert par des tests :
 | `core/approvals.py` | Validations en attente, une par fil, expiration à 30 min |
 | `core/messaging.py` | Formatage WhatsApp, découpage 4096, envoi Evolution |
 | `core/workers.py` | Worker ARQ, files à priorités, verrous par ressource, cron |
+| `core/llm.py` | Router (Haiku 4.5), Planner et Responder (Opus 5) — validation du plan, refus |
+| `core/prompts.py` | Prompt système et consignes par nœud, avec point de cache |
 
 Ce qui reste à câbler, marqué `NotImplementedError` dans le code :
 
-- Les nœuds LLM réels : `Router`, `Planner` et `Responder` sont des protocoles,
-  leurs implémentations Anthropic restent à écrire
 - Le remplacement des registres en mémoire par les tables Postgres
 - Les migrations Alembic
 - Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
@@ -75,7 +75,7 @@ document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse c
 
 ## Tests
 
-137 tests, aucune dépendance réseau — `InMemoryCalendar` et le registre d'outils
+156 tests, aucune dépendance réseau — `InMemoryCalendar` et le registre d'outils
 permettent d'exercer tout le graphe hors ligne.
 
 `FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et
@@ -89,7 +89,36 @@ validation), `test_completed_tasks_are_not_replayed_on_resume`,
 `test_all_day_events_are_not_read_as_timestamps`, `test_callback_refuses_account_confusion`,
 `test_brute_force_burns_the_code`, `test_tokens_are_never_written_in_clear`,
 `test_ambiguous_reply_replans_instead_of_sending`, `test_expired_approval_is_not_honoured`,
-`test_low_confidence_asks_to_repeat_instead_of_guessing`.
+`test_low_confidence_asks_to_repeat_instead_of_guessing`,
+`test_planner_drops_hallucinated_tools`, `test_volatile_context_stays_out_of_the_cached_block`.
+
+## Les nœuds LLM
+
+Deux modèles : Haiku 4.5 pour le routage (l'essentiel du trafic est trivial),
+Opus 5 pour la planification et la réponse. Le découpage tient parce que le
+routeur ne décide de rien d'irréversible — au pire il escalade vers Opus.
+
+Deux garde-fous côté code, indépendants du modèle :
+
+**Le plan est validé contre le registre d'outils.** Un nom d'outil halluciné est
+écarté avant l'exécution, avec ses dépendances orphelines — pas découvert au
+milieu d'un plan à moitié appliqué.
+
+**Un refus est traité comme un refus.** `stop_reason == "refusal"` est vérifié
+avant de toucher à `content` : lire le contenu d'une réponse déclinée donne une
+chaîne vide ou un message d'excuse, que le pipeline prendrait pour un résultat.
+
+Le prompt système est mis en cache (`cache_control`), le contexte volatil — date,
+canal — reste en dehors du bloc caché : une date dans le préfixe l'invaliderait à
+chaque tour.
+
+Câblage :
+
+```python
+client = anthropic.AsyncAnthropic()
+router, planner, responder = build_nodes(client, frozenset(registry.tools))
+pipeline = Pipeline(registry, router, planner, responder, sender)
+```
 
 ## Le provider Google en trois points non devinables
 
