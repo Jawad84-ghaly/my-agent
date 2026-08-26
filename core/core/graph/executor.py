@@ -75,7 +75,9 @@ async def execute_plan(
             *(_run(task, registry, state.results) for task in runnable)
         )
 
-        for task, result in zip(runnable, outcomes):
+        # strict= : si gather rendait un nombre de resultats different, mieux vaut
+        # une erreur qu'un resultat silencieusement perdu.
+        for task, result in zip(runnable, outcomes, strict=True):
             if result.ok:
                 state.results[task.id] = result.data
                 state.completed.append(task.id)

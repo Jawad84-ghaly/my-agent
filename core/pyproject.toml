@@ -15,7 +15,7 @@ dependencies = [
 agent = ["langgraph>=0.2", "langchain-anthropic>=0.2", "anthropic>=0.39"]
 db = ["sqlalchemy>=2.0", "alembic>=1.13", "asyncpg>=0.30", "pgvector>=0.3"]
 worker = ["arq>=0.26", "redis>=5.1"]
-dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7"]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7,<0.16"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -31,3 +31,14 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Jeu de regles fige explicitement. S'en remettre aux defauts de ruff rend la CI
+# dependante de sa version : une montee mineure a suffi a faire passer ce depot
+# de 6 a 68 signalements, tous stylistiques. On garde ici ce qui attrape de
+# vraies erreurs -- imports morts, noms indefinis, bugs classiques.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = [
+  "E501",  # longueur de ligne : laissee au formateur
+  "B008",  # appel dans une valeur par defaut -- idiome FastAPI (Depends)
+]
