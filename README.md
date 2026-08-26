@@ -20,3 +20,8 @@ python3 -m http.server 8000 --directory web
 - `docs/nova-spec.html` — spécification technique complète et guide d'implémentation
   (architecture, modèle de données, catalogue d'outils, prompt système, workflows,
   plan de développement en 8 semaines).
+
+## Core agentique
+
+- `core/` — backend Python (FastAPI + LangGraph). Voir [`core/README.md`](core/README.md).
+- `infra/` — Docker Compose : Postgres+pgvector, Redis, Evolution API, Langfuse.

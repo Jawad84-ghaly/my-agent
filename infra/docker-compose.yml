@@ -1,0 +1,76 @@
+name: nova
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: nova
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définis POSTGRES_PASSWORD}
+      POSTGRES_DB: nova
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nova"]
+      interval: 5s
+      retries: 10
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  core:
+    build: ../core
+    command: uvicorn core.api.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+asyncpg://nova:${POSTGRES_PASSWORD}@postgres/nova
+      REDIS_URL: redis://redis:6379/0
+      NOVA_MASTER_KEY: ${NOVA_MASTER_KEY:?génère-la avec python -m core.security.crypto --generate}
+      NOVA_WHATSAPP_WEBHOOK_SECRET: ${NOVA_WHATSAPP_WEBHOOK_SECRET:?}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    ports: ["8000:8000"]
+
+  worker:
+    build: ../core
+    command: arq core.workers.WorkerSettings
+    environment:
+      DATABASE_URL: postgresql+asyncpg://nova:${POSTGRES_PASSWORD}@postgres/nova
+      REDIS_URL: redis://redis:6379/0
+      NOVA_MASTER_KEY: ${NOVA_MASTER_KEY:?}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  evolution:
+    image: atendai/evolution-api:v2
+    environment:
+      AUTHENTICATION_API_KEY: ${EVO_KEY:?}
+      WEBHOOK_GLOBAL_URL: ${PUBLIC_URL:?}/webhooks/whatsapp
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+    volumes: [evodata:/evolution/instances]
+    ports: ["8080:8080"]
+
+  langfuse:
+    image: langfuse/langfuse:2
+    environment:
+      DATABASE_URL: postgresql://nova:${POSTGRES_PASSWORD}@postgres:5432/nova
+      NEXTAUTH_SECRET: ${LANGFUSE_SECRET:?}
+      SALT: ${LANGFUSE_SALT:?}
+      NEXTAUTH_URL: http://localhost:3000
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["3000:3000"]
+
+volumes:
+  pgdata:
+  redisdata:
+  evodata:
