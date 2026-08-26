@@ -78,23 +78,22 @@ pre code{background:none;padding:0;font-size:inherit}
 .copy.done{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
 #script{max-height:16rem}
 </style>
-
 <div class="wrap">
 <header>
   <p class="eyebrow">Nova — livraison sans téléchargement</p>
   <h1>Installer le provider Google</h1>
   <p class="lede">Les archives ne se téléchargent pas sur ton poste. Cette page contourne
-  le problème : tu copies un script, tu le colles dans PowerShell, et les 7 fichiers
+  le problème : tu copies un script, tu le colles dans PowerShell, et les 12 fichiers
   s'écrivent tout seuls au bon endroit.</p>
 </header>
 
 <div class="hero-action">
   <div class="row">
     <button class="big" id="copyScript">Copier le script d'installation</button>
-    <span class="hint" id="status">7 fichiers · aucun téléchargement requis</span>
+    <span class="hint" id="status">12 fichiers · aucun téléchargement requis</span>
   </div>
-  <p class="hint">Le script vérifie que le dépôt existe, crée le dossier
-  <code>core\core\integrations</code>, puis écrit chaque fichier.</p>
+  <p class="hint">Provider Google Calendar, flow OAuth complet, appairage des canaux
+  WhatsApp — et les tests correspondants.</p>
 </div>
 
 <h2>Marche à suivre</h2>
@@ -102,26 +101,27 @@ pre code{background:none;padding:0;font-size:inherit}
   <li><span>Clique sur <strong>Copier le script d'installation</strong> ci-dessus.</span></li>
   <li><span>Ouvre <strong>PowerShell</strong> — peu importe le dossier courant, le script
       s'y rend tout seul.</span></li>
-  <li><span>Colle avec <strong>Ctrl+V</strong>, puis appuie sur <strong>Entrée</strong>.
-      Tu verras défiler les 7 lignes <code>ecrit ...</code>.</span></li>
-  <li><span>Publie :<br><code>git add . ; git commit -m "Add Google Calendar provider" ; git push</code></span></li>
-  <li><span>Vérifie que tout tourne :<br><code>cd core ; pytest -q</code> → <strong>92 passed</strong></span></li>
+  <li><span>Colle avec <strong>Ctrl+V</strong>, puis <strong>Entrée</strong>.
+      Tu verras défiler les 12 lignes <code>ecrit ...</code>.</span></li>
+  <li><span>Publie :<br><code>git add . ; git commit -m "Add Google provider, OAuth callback and channel pairing" ; git push</code></span></li>
+  <li><span>Vérifie :<br><code>cd core ; pytest -q</code> → <strong>116 passed</strong></span></li>
 </ol>
 
-<div class="note warn"><p><strong>Si PowerShell te demande une confirmation</strong> à cause
-de la longueur du collage, réponds <code>o</code> puis Entrée. C'est normal pour un script
-de cette taille.</p></div>
+<div class="note warn"><p><strong>Si PowerShell demande une confirmation</strong> à cause de
+la longueur du collage, réponds <code>o</code> puis Entrée. C'est normal pour un script de
+cette taille.</p></div>
 
-<div class="note ok"><p><strong>Rien n'est écrasé.</strong> Les 7 fichiers sont nouveaux :
-aucun fichier existant du dépôt n'est modifié par ce script.</p></div>
+<div class="note ok"><p><strong>11 fichiers sont nouveaux.</strong> Seul
+<code>core/core/api/main.py</code> est remplacé — par la version qui câble l'appairage des
+canaux sur le webhook. Aucun autre fichier existant n'est touché.</p></div>
 
 <h2>Le script</h2>
-<p>Si tu préfères le relire avant de l'exécuter — c'est une bonne habitude pour tout script
-copié depuis le web.</p>
+<p>Si tu préfères le relire avant de l'exécuter — bonne habitude pour tout script copié
+depuis le web.</p>
 <section class="file">
   <div class="file-head"><code class="path">nova-install.ps1</code>
     <button class="copy" data-target="script">Copier</button></div>
-  <pre id="script"><code># Nova - installe le provider Google Calendar
+  <pre id="script"><code># Nova - installe le provider Google + OAuth + appairage des canaux
 # Colle ce script entier dans PowerShell, depuis n'importe ou.
 
 $repo = 'C:\Users\Laptop\my-agent\my-agent'
@@ -719,6 +719,458 @@ Set-Content -Path 'core\core\providers\google_calendar.py' -Value $c -Encoding u
 Write-Host '  ecrit core/core/providers/google_calendar.py'
 
 $c = @'
+"""Persistance des jetons OAuth, chiffrés au repos.
+
+`crypto.py` fournissait les primitives ; il manquait la couche qui s'en sert.
+`EncryptedCredentialStore` implémente le protocole `CredentialStore` attendu par
+`google_oauth.ensure_fresh`, en chiffrant systématiquement avant écriture.
+
+Le backend est volontairement abstrait (`KeyValueBackend`) : en test c'est un
+dictionnaire, en production la table `integrations`. Le chiffrement est le même
+dans les deux cas — on ne teste pas un chemin différent de celui qui tourne.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Protocol
+
+from .integrations.google_oauth import GoogleCredentials
+from .security.crypto import build_aad, decrypt_token, encrypt_token
+
+
+class UnknownIntegration(KeyError):
+    """Aucune intégration enregistrée pour cet utilisateur et ce fournisseur."""
+
+
+class KeyValueBackend(Protocol):
+    async def get(self, key: str) -&gt; dict | None: ...
+
+    async def put(self, key: str, value: dict) -&gt; None: ...
+
+
+@dataclass
+class InMemoryBackend:
+    rows: dict[str, dict] = field(default_factory=dict)
+
+    async def get(self, key: str) -&gt; dict | None:
+        return self.rows.get(key)
+
+    async def put(self, key: str, value: dict) -&gt; None:
+        self.rows[key] = value
+
+
+@dataclass
+class EncryptedCredentialStore:
+    """Stocke access et refresh tokens chiffrés, expiration en clair.
+
+    L'expiration reste lisible pour éviter de déchiffrer à chaque vérification
+    de fraîcheur — elle n'est pas un secret, et la déchiffrer en boucle ferait
+    passer la clé maîtresse par la mémoire bien plus souvent que nécessaire.
+    """
+
+    backend: KeyValueBackend
+    key: bytes
+    provider: str = "google"
+
+    def _row_key(self, user_id: str) -&gt; str:
+        return f"{user_id}:{self.provider}"
+
+    async def load(self, user_id: str) -&gt; GoogleCredentials:
+        row = await self.backend.get(self._row_key(user_id))
+        if row is None:
+            raise UnknownIntegration(
+                f"Aucune intégration {self.provider} pour {user_id}. "
+                "L'utilisateur doit d'abord autoriser l'accès."
+            )
+        aad = build_aad(user_id, self.provider)
+        return GoogleCredentials(
+            access_token=decrypt_token(row["access_token_enc"], aad, self.key),
+            refresh_token=decrypt_token(row["refresh_token_enc"], aad, self.key),
+            expires_at=row["expires_at"],
+        )
+
+    async def save(self, user_id: str, credentials: GoogleCredentials) -&gt; None:
+        aad = build_aad(user_id, self.provider)
+        await self.backend.put(
+            self._row_key(user_id),
+            {
+                "user_id": user_id,
+                "provider": self.provider,
+                "access_token_enc": encrypt_token(credentials.access_token, aad, self.key),
+                "refresh_token_enc": encrypt_token(credentials.refresh_token, aad, self.key),
+                "expires_at": credentials.expires_at,
+            },
+        )
+
+    async def exists(self, user_id: str) -&gt; bool:
+        return await self.backend.get(self._row_key(user_id)) is not None
+
+'@
+Set-Content -Path 'core\core\store.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/core/store.py'
+
+$c = @'
+"""Appairage des canaux — qui a le droit de donner des ordres à l'agent.
+
+Le webhook WhatsApp est public : n'importe qui connaissant le numéro du bot peut
+lui écrire. Sans appairage, un inconnu pilote ton agenda et ta messagerie.
+
+Le mécanisme : l'utilisateur génère un code à 6 chiffres dans le dashboard, puis
+l'envoie au bot depuis le numéro à appairer. Le code est à usage unique et
+expire vite.
+
+Trois précautions, chacune contre une attaque concrète :
+- comparaison à temps constant (un code à 6 chiffres se devine par timing)
+- nombre d'essais borné (100 000 combinaisons se testent vite par force brute)
+- code lié à un seul utilisateur, jamais réutilisable
+"""
+
+from __future__ import annotations
+
+import hmac
+import secrets
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+
+PAIRING_TTL = timedelta(minutes=10)
+MAX_ATTEMPTS = 5
+
+
+class PairingError(RuntimeError):
+    """Appairage refusé. Le message est volontairement peu détaillé."""
+
+
+@dataclass
+class PairingCode:
+    code: str
+    user_id: str
+    created_at: datetime
+    attempts: int = 0
+    consumed: bool = False
+
+    def is_expired(self, now: datetime) -&gt; bool:
+        return now - self.created_at &gt; PAIRING_TTL
+
+
+@dataclass
+class Channel:
+    user_id: str
+    kind: str  # whatsapp | chrome | desktop | mobile
+    external_id: str  # numéro, device token
+    verified_at: datetime
+    active: bool = True
+
+
+@dataclass
+class ChannelRegistry:
+    """Registre en mémoire. En production : tables `channels` et `pairing_codes`."""
+
+    channels: dict[tuple[str, str], Channel] = field(default_factory=dict)
+    pending: dict[str, PairingCode] = field(default_factory=dict)
+
+    # --- côté dashboard ---------------------------------------------------
+
+    def issue_code(self, user_id: str, now: datetime | None = None) -&gt; str:
+        """Génère un code à 6 chiffres. Un seul code actif par utilisateur."""
+        now = now or datetime.now(timezone.utc)
+        self._purge(now)
+        for code, pending in list(self.pending.items()):
+            if pending.user_id == user_id:
+                del self.pending[code]
+
+        # secrets, pas random : un générateur prévisible rendrait le code devinable.
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        self.pending[code] = PairingCode(code, user_id, now)
+        return code
+
+    # --- côté canal -------------------------------------------------------
+
+    def redeem(
+        self, submitted: str, kind: str, external_id: str, now: datetime | None = None
+    ) -&gt; Channel:
+        """Consomme un code et enregistre le canal. Lève PairingError sinon."""
+        now = now or datetime.now(timezone.utc)
+        self._purge(now)
+
+        submitted = submitted.strip().replace(" ", "")
+        match = None
+        for code, pending in self.pending.items():
+            # Comparaison à temps constant sur tous les candidats : sortir tôt
+            # sur le premier écart révélerait le code par mesure du temps.
+            if hmac.compare_digest(code, submitted):
+                match = pending
+
+        if match is None:
+            self._count_failure(now)
+            raise PairingError("Code invalide ou expiré.")
+
+        if match.consumed:
+            raise PairingError("Code déjà utilisé.")
+
+        match.attempts += 1
+        if match.attempts &gt; MAX_ATTEMPTS:
+            del self.pending[match.code]
+            raise PairingError("Trop de tentatives. Génère un nouveau code.")
+
+        match.consumed = True
+        del self.pending[match.code]
+
+        channel = Channel(match.user_id, kind, external_id, now)
+        self.channels[(kind, external_id)] = channel
+        return channel
+
+    def get_verified(self, kind: str, external_id: str) -&gt; Channel | None:
+        """Renvoie le canal appairé, ou None. Un None signifie : ignorer en silence."""
+        channel = self.channels.get((kind, external_id))
+        if channel is None or not channel.active:
+            return None
+        return channel
+
+    def revoke(self, kind: str, external_id: str) -&gt; bool:
+        channel = self.channels.get((kind, external_id))
+        if channel is None:
+            return False
+        channel.active = False
+        return True
+
+    # --- interne ----------------------------------------------------------
+
+    def _purge(self, now: datetime) -&gt; None:
+        for code, pending in list(self.pending.items()):
+            if pending.is_expired(now):
+                del self.pending[code]
+
+    def _count_failure(self, now: datetime) -&gt; None:
+        """Un mauvais code consomme un essai sur tous les codes en attente.
+
+        Empêche de balayer l'espace des codes en profitant du fait qu'un échec
+        sur un code ne coûte rien aux autres.
+        """
+        for pending in list(self.pending.values()):
+            pending.attempts += 1
+            if pending.attempts &gt; MAX_ATTEMPTS:
+                self.pending.pop(pending.code, None)
+
+'@
+Set-Content -Path 'core\core\channels.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/core/channels.py'
+
+$c = @'
+"""Routes OAuth — le bout manquant entre l'URL d'autorisation et le store.
+
+Le paramètre `state` est le seul rempart contre le CSRF sur ce flux : sans lui,
+un attaquant peut faire connecter *son* compte Google au compte Nova de la
+victime, et lire ensuite tout ce que l'agent y écrit. On le signe donc (HMAC),
+on y met l'identité attendue, et on le fait expirer.
+"""
+
+from __future__ import annotations
+
+import base64
+import hmac
+import hashlib
+import json
+import time
+from dataclasses import dataclass
+
+STATE_TTL_SECONDS = 600
+
+
+class StateError(RuntimeError):
+    """State absent, altéré, expiré, ou destiné à un autre utilisateur."""
+
+
+def _b64e(raw: bytes) -&gt; str:
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _b64d(text: str) -&gt; bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def sign_state(user_id: str, secret: str, now: float | None = None) -&gt; str:
+    payload = {
+        "uid": user_id,
+        "iat": int(now if now is not None else time.time()),
+        "nonce": _b64e(hashlib.sha256(f"{user_id}{time.time_ns()}".encode()).digest()[:12]),
+    }
+    body = _b64e(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
+    signature = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{body}.{signature}"
+
+
+def verify_state(state: str, secret: str, now: float | None = None) -&gt; str:
+    """Renvoie l'user_id porté par le state. Lève StateError sinon."""
+    if not state or "." not in state:
+        raise StateError("state absent ou malformé")
+
+    body, _, signature = state.partition(".")
+    expected = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(expected, signature):
+        raise StateError("signature du state invalide")
+
+    try:
+        payload = json.loads(_b64d(body))
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise StateError("contenu du state illisible") from exc
+
+    now = now if now is not None else time.time()
+    if now - float(payload.get("iat", 0)) &gt; STATE_TTL_SECONDS:
+        raise StateError("state expiré")
+
+    user_id = payload.get("uid")
+    if not user_id:
+        raise StateError("state sans identité")
+    return user_id
+
+
+@dataclass
+class OAuthConfig:
+    client_id: str
+    client_secret: str
+    redirect_uri: str
+    state_secret: str
+
+
+async def handle_callback(
+    config: OAuthConfig,
+    transport,
+    store,
+    code: str,
+    state: str,
+    session_user_id: str | None = None,
+    now: float | None = None,
+) -&gt; str:
+    """Échange le code contre des jetons et les enregistre chiffrés.
+
+    `session_user_id` est l'utilisateur connecté au moment du retour. S'il ne
+    correspond pas au state, on refuse : c'est exactement la signature d'une
+    attaque par confusion de compte.
+    """
+    from ..integrations.google_oauth import exchange_code
+
+    user_id = verify_state(state, config.state_secret, now)
+    if session_user_id is not None and session_user_id != user_id:
+        raise StateError("le state ne correspond pas à l'utilisateur connecté")
+
+    credentials = await exchange_code(
+        transport,
+        code,
+        config.client_id,
+        config.client_secret,
+        config.redirect_uri,
+        now,
+    )
+    await store.save(user_id, credentials)
+    return user_id
+
+'@
+Set-Content -Path 'core\core\api\oauth.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/core/api/oauth.py'
+
+$c = @'
+"""Application FastAPI — la porte d'entrée de tous les canaux.
+
+Le gateway ne contient aucune logique agentique : il authentifie, normalise,
+met en file, et rend la main. Tout le raisonnement vit dans le graphe.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+
+from fastapi import BackgroundTasks, FastAPI, Header, Request, Response
+
+from ..channels import ChannelRegistry
+from .webhooks import SeenCache, WebhookRejected, normalize_evolution, verify_signature
+
+log = logging.getLogger("nova.api")
+
+app = FastAPI(title="Nova Core", version="0.1.0")
+seen = SeenCache()
+channels = ChannelRegistry()  # à remplacer par la table `channels` en production
+
+WHATSAPP_SECRET = os.environ.get("NOVA_WHATSAPP_WEBHOOK_SECRET", "")
+
+
+@app.get("/health")
+async def health() -&gt; dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/webhooks/whatsapp")
+async def whatsapp_webhook(
+    request: Request,
+    background: BackgroundTasks,
+    x_hub_signature_256: str = Header(default=""),
+    x_hub_timestamp: str | None = Header(default=None),
+) -&gt; Response:
+    """Reçoit un message WhatsApp.
+
+    Répond systématiquement 200, même sur rejet : un code d'erreur déclencherait
+    des relances côté Meta/Evolution et révélerait la politique de filtrage.
+    """
+    body = await request.body()
+
+    try:
+        verify_signature(body, x_hub_signature_256, WHATSAPP_SECRET, x_hub_timestamp)
+    except WebhookRejected as exc:
+        log.warning("webhook refusé: %s", exc)
+        return Response(status_code=200)
+
+    payload = await request.json()
+    message = normalize_evolution(payload)
+    if message is None:
+        return Response(status_code=200)
+
+    if not seen.check_and_add(message.id):
+        log.info("message déjà traité, ignoré: %s", message.id)
+        return Response(status_code=200)
+
+    channel = channels.get_verified("whatsapp", message.from_number)
+    if channel is None:
+        # Un numéro inconnu envoie peut-être son code d'appairage.
+        if message.kind == "text" and message.text:
+            paired = _try_pairing(message.text, message.from_number)
+            if paired:
+                return Response(status_code=200)
+        log.info("numéro non appairé, ignoré")
+        return Response(status_code=200)
+
+    # ACK immédiat, traitement asynchrone : au-delà de 5 s, l'émetteur retente.
+    background.add_task(handle_message, channel.user_id, message)
+    return Response(status_code=200)
+
+
+def _try_pairing(text: str, number: str) -&gt; bool:
+    """Tente d'interpréter le message comme un code d'appairage à 6 chiffres."""
+    candidate = text.strip().replace(" ", "")
+    if not (candidate.isdigit() and len(candidate) == 6):
+        return False
+    try:
+        channels.redeem(candidate, "whatsapp", number)
+    except Exception as exc:  # PairingError et dérivés
+        log.info("appairage refusé: %s", exc)
+        return False
+    log.info("canal WhatsApp appairé")
+    return True
+
+
+async def handle_message(user_id: str, message) -&gt; None:
+    """Point d'entrée du pipeline : normalisation, graphe, réponse.
+
+    À câbler sur la file ARQ/Celery en production — un BackgroundTask meurt avec
+    le processus, ce qui est acceptable en développement seulement.
+    """
+    raise NotImplementedError("à câbler sur le worker")
+
+'@
+Set-Content -Path 'core\core\api\main.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/core/api/main.py'
+
+$c = @'
 """Double de transport HTTP : les tests n'ouvrent jamais de connexion réseau."""
 
 from __future__ import annotations
@@ -1143,10 +1595,230 @@ def test_client_error_surfaces_the_google_message():
 Set-Content -Path 'core\tests\test_google_calendar.py' -Value $c -Encoding utf8
 Write-Host '  ecrit core/tests/test_google_calendar.py'
 
+$c = @'
+import asyncio
+import base64
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from core.api.oauth import OAuthConfig, StateError, handle_callback, sign_state, verify_state
+from core.channels import ChannelRegistry, PairingError
+from core.integrations.google_oauth import GoogleCredentials
+from core.integrations.http import Response
+from core.security.crypto import CryptoError, generate_key
+from core.store import EncryptedCredentialStore, InMemoryBackend, UnknownIntegration
+from conftest import FakeTransport, always
+
+KEY = base64.urlsafe_b64decode(generate_key())
+NOW = 1_800_000_000.0
+T0 = datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+def make_store(backend=None) -&gt; EncryptedCredentialStore:
+    return EncryptedCredentialStore(backend or InMemoryBackend(), KEY)
+
+
+# --- store chiffré ---------------------------------------------------------
+
+def test_roundtrip_through_the_store():
+    store = make_store()
+    creds = GoogleCredentials("at-1", "rt-1", NOW + 3600)
+    run(store.save("u1", creds))
+    loaded = run(store.load("u1"))
+    assert loaded.access_token == "at-1"
+    assert loaded.refresh_token == "rt-1"
+
+
+def test_tokens_are_never_written_in_clear():
+    backend = InMemoryBackend()
+    store = make_store(backend)
+    run(store.save("u1", GoogleCredentials("at-secret", "rt-secret", NOW)))
+    blob = repr(backend.rows["u1:google"]).encode()
+    assert b"at-secret" not in blob
+    assert b"rt-secret" not in blob
+
+
+def test_expiry_stays_readable_without_decrypting():
+    backend = InMemoryBackend()
+    run(make_store(backend).save("u1", GoogleCredentials("at", "rt", NOW + 42)))
+    assert backend.rows["u1:google"]["expires_at"] == NOW + 42
+
+
+def test_row_of_another_user_cannot_be_decrypted():
+    """Un accès en écriture à la base ne permet pas de déplacer un jeton."""
+    backend = InMemoryBackend()
+    store = make_store(backend)
+    run(store.save("victime", GoogleCredentials("at", "rt", NOW)))
+    backend.rows["attaquant:google"] = dict(backend.rows["victime:google"])
+    with pytest.raises(CryptoError):
+        run(store.load("attaquant"))
+
+
+def test_missing_integration_is_explicit():
+    with pytest.raises(UnknownIntegration, match="autoriser"):
+        run(make_store().load("inconnu"))
+
+
+def test_exists_reports_presence():
+    store = make_store()
+    assert run(store.exists("u1")) is False
+    run(store.save("u1", GoogleCredentials("at", "rt", NOW)))
+    assert run(store.exists("u1")) is True
+
+
+# --- state OAuth -----------------------------------------------------------
+
+def test_state_roundtrip():
+    state = sign_state("u1", "secret", NOW)
+    assert verify_state(state, "secret", NOW + 10) == "u1"
+
+
+def test_tampered_state_is_rejected():
+    state = sign_state("u1", "secret", NOW)
+    body, _, sig = state.partition(".")
+    forged = sign_state("attaquant", "secret", NOW).split(".")[0] + "." + sig
+    with pytest.raises(StateError, match="signature"):
+        verify_state(forged, "secret", NOW)
+
+
+def test_state_signed_with_another_secret_is_rejected():
+    with pytest.raises(StateError):
+        verify_state(sign_state("u1", "autre", NOW), "secret", NOW)
+
+
+def test_expired_state_is_rejected():
+    state = sign_state("u1", "secret", NOW)
+    with pytest.raises(StateError, match="expiré"):
+        verify_state(state, "secret", NOW + 601)
+
+
+def test_malformed_state_is_rejected():
+    for bad in ("", "sans-point", "aaaa.bbbb"):
+        with pytest.raises(StateError):
+            verify_state(bad, "secret", NOW)
+
+
+# --- callback --------------------------------------------------------------
+
+def config() -&gt; OAuthConfig:
+    return OAuthConfig("cid", "csecret", "https://nova.fr/cb", "state-secret")
+
+
+def token_response():
+    return always(Response(200, {"access_token": "at-1", "refresh_token": "rt-1", "expires_in": 3600}))
+
+
+def test_callback_stores_credentials():
+    store = make_store()
+    state = sign_state("u1", "state-secret", NOW)
+    user = run(handle_callback(config(), FakeTransport(token_response()), store, "code", state, "u1", NOW))
+    assert user == "u1"
+    assert run(store.load("u1")).access_token == "at-1"
+
+
+def test_callback_refuses_account_confusion():
+    """Sans ce contrôle, on connecte le Google d'un attaquant au Nova de la victime."""
+    store = make_store()
+    state = sign_state("attaquant", "state-secret", NOW)
+    with pytest.raises(StateError, match="ne correspond pas"):
+        run(handle_callback(config(), FakeTransport(token_response()), store, "code", state, "victime", NOW))
+
+
+def test_callback_does_not_store_on_invalid_state():
+    store = make_store()
+    with pytest.raises(StateError):
+        run(handle_callback(config(), FakeTransport(token_response()), store, "code", "bidon", None, NOW))
+    assert run(store.exists("u1")) is False
+
+
+# --- appairage des canaux --------------------------------------------------
+
+def test_pairing_registers_the_channel():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    channel = reg.redeem(code, "whatsapp", "33612345678", T0)
+    assert channel.user_id == "u1"
+    assert reg.get_verified("whatsapp", "33612345678") is channel
+
+
+def test_unknown_number_is_not_verified():
+    """Le webhook doit pouvoir ignorer un inconnu en silence."""
+    assert ChannelRegistry().get_verified("whatsapp", "33699999999") is None
+
+
+def test_code_is_single_use():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    reg.redeem(code, "whatsapp", "33612345678", T0)
+    with pytest.raises(PairingError):
+        reg.redeem(code, "whatsapp", "33600000000", T0)
+
+
+def test_expired_code_is_refused():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    with pytest.raises(PairingError):
+        reg.redeem(code, "whatsapp", "33612345678", T0 + timedelta(minutes=11))
+
+
+def test_wrong_code_is_refused():
+    reg = ChannelRegistry()
+    reg.issue_code("u1", T0)
+    with pytest.raises(PairingError, match="invalide"):
+        reg.redeem("000000", "whatsapp", "33612345678", T0)
+
+
+def test_brute_force_burns_the_code():
+    """100 000 combinaisons se testent vite : le code doit mourir avant."""
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    for _ in range(6):
+        with pytest.raises(PairingError):
+            reg.redeem("999999", "whatsapp", "33612345678", T0)
+    with pytest.raises(PairingError):
+        reg.redeem(code, "whatsapp", "33612345678", T0)
+
+
+def test_issuing_a_new_code_invalidates_the_previous_one():
+    reg = ChannelRegistry()
+    first = reg.issue_code("u1", T0)
+    reg.issue_code("u1", T0)
+    with pytest.raises(PairingError):
+        reg.redeem(first, "whatsapp", "33612345678", T0)
+
+
+def test_code_format():
+    code = ChannelRegistry().issue_code("u1", T0)
+    assert len(code) == 6 and code.isdigit()
+
+
+def test_spaces_in_submitted_code_are_tolerated():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    spaced = f"{code[:3]} {code[3:]}"
+    assert reg.redeem(spaced, "whatsapp", "33612345678", T0).user_id == "u1"
+
+
+def test_revoked_channel_stops_being_verified():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    reg.redeem(code, "whatsapp", "33612345678", T0)
+    assert reg.revoke("whatsapp", "33612345678") is True
+    assert reg.get_verified("whatsapp", "33612345678") is None
+
+'@
+Set-Content -Path 'core\tests\test_store_channels.py' -Value $c -Encoding utf8
+Write-Host '  ecrit core/tests/test_store_channels.py'
+
 Write-Host ''
-Write-Host '7 fichiers ecrits.' -ForegroundColor Green
+Write-Host '12 fichiers ecrits.' -ForegroundColor Green
 Write-Host 'Etape suivante :' -ForegroundColor Cyan
-Write-Host '  git add . ; git commit -m "Add Google Calendar provider" ; git push'</code></pre>
+Write-Host '  git add . ; git commit -m "Add Google provider, OAuth callback and channel pairing" ; git push'</code></pre>
 </section>
 
 <h2>Les fichiers, un par un</h2>
@@ -1748,10 +2420,466 @@ def _patch_payload(patch: dict, tz: str) -&gt; dict:
 </section>
 <section class="file">
   <div class="file-head">
-    <code class="path">core/tests/conftest.py</code>
+    <code class="path">core/core/store.py</code>
     <button class="copy" data-target="f4">Copier</button>
   </div>
-  <pre id="f4"><code>"""Double de transport HTTP : les tests n'ouvrent jamais de connexion réseau."""
+  <pre id="f4"><code>"""Persistance des jetons OAuth, chiffrés au repos.
+
+`crypto.py` fournissait les primitives ; il manquait la couche qui s'en sert.
+`EncryptedCredentialStore` implémente le protocole `CredentialStore` attendu par
+`google_oauth.ensure_fresh`, en chiffrant systématiquement avant écriture.
+
+Le backend est volontairement abstrait (`KeyValueBackend`) : en test c'est un
+dictionnaire, en production la table `integrations`. Le chiffrement est le même
+dans les deux cas — on ne teste pas un chemin différent de celui qui tourne.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Protocol
+
+from .integrations.google_oauth import GoogleCredentials
+from .security.crypto import build_aad, decrypt_token, encrypt_token
+
+
+class UnknownIntegration(KeyError):
+    """Aucune intégration enregistrée pour cet utilisateur et ce fournisseur."""
+
+
+class KeyValueBackend(Protocol):
+    async def get(self, key: str) -&gt; dict | None: ...
+
+    async def put(self, key: str, value: dict) -&gt; None: ...
+
+
+@dataclass
+class InMemoryBackend:
+    rows: dict[str, dict] = field(default_factory=dict)
+
+    async def get(self, key: str) -&gt; dict | None:
+        return self.rows.get(key)
+
+    async def put(self, key: str, value: dict) -&gt; None:
+        self.rows[key] = value
+
+
+@dataclass
+class EncryptedCredentialStore:
+    """Stocke access et refresh tokens chiffrés, expiration en clair.
+
+    L'expiration reste lisible pour éviter de déchiffrer à chaque vérification
+    de fraîcheur — elle n'est pas un secret, et la déchiffrer en boucle ferait
+    passer la clé maîtresse par la mémoire bien plus souvent que nécessaire.
+    """
+
+    backend: KeyValueBackend
+    key: bytes
+    provider: str = "google"
+
+    def _row_key(self, user_id: str) -&gt; str:
+        return f"{user_id}:{self.provider}"
+
+    async def load(self, user_id: str) -&gt; GoogleCredentials:
+        row = await self.backend.get(self._row_key(user_id))
+        if row is None:
+            raise UnknownIntegration(
+                f"Aucune intégration {self.provider} pour {user_id}. "
+                "L'utilisateur doit d'abord autoriser l'accès."
+            )
+        aad = build_aad(user_id, self.provider)
+        return GoogleCredentials(
+            access_token=decrypt_token(row["access_token_enc"], aad, self.key),
+            refresh_token=decrypt_token(row["refresh_token_enc"], aad, self.key),
+            expires_at=row["expires_at"],
+        )
+
+    async def save(self, user_id: str, credentials: GoogleCredentials) -&gt; None:
+        aad = build_aad(user_id, self.provider)
+        await self.backend.put(
+            self._row_key(user_id),
+            {
+                "user_id": user_id,
+                "provider": self.provider,
+                "access_token_enc": encrypt_token(credentials.access_token, aad, self.key),
+                "refresh_token_enc": encrypt_token(credentials.refresh_token, aad, self.key),
+                "expires_at": credentials.expires_at,
+            },
+        )
+
+    async def exists(self, user_id: str) -&gt; bool:
+        return await self.backend.get(self._row_key(user_id)) is not None
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head">
+    <code class="path">core/core/channels.py</code>
+    <button class="copy" data-target="f5">Copier</button>
+  </div>
+  <pre id="f5"><code>"""Appairage des canaux — qui a le droit de donner des ordres à l'agent.
+
+Le webhook WhatsApp est public : n'importe qui connaissant le numéro du bot peut
+lui écrire. Sans appairage, un inconnu pilote ton agenda et ta messagerie.
+
+Le mécanisme : l'utilisateur génère un code à 6 chiffres dans le dashboard, puis
+l'envoie au bot depuis le numéro à appairer. Le code est à usage unique et
+expire vite.
+
+Trois précautions, chacune contre une attaque concrète :
+- comparaison à temps constant (un code à 6 chiffres se devine par timing)
+- nombre d'essais borné (100 000 combinaisons se testent vite par force brute)
+- code lié à un seul utilisateur, jamais réutilisable
+"""
+
+from __future__ import annotations
+
+import hmac
+import secrets
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+
+PAIRING_TTL = timedelta(minutes=10)
+MAX_ATTEMPTS = 5
+
+
+class PairingError(RuntimeError):
+    """Appairage refusé. Le message est volontairement peu détaillé."""
+
+
+@dataclass
+class PairingCode:
+    code: str
+    user_id: str
+    created_at: datetime
+    attempts: int = 0
+    consumed: bool = False
+
+    def is_expired(self, now: datetime) -&gt; bool:
+        return now - self.created_at &gt; PAIRING_TTL
+
+
+@dataclass
+class Channel:
+    user_id: str
+    kind: str  # whatsapp | chrome | desktop | mobile
+    external_id: str  # numéro, device token
+    verified_at: datetime
+    active: bool = True
+
+
+@dataclass
+class ChannelRegistry:
+    """Registre en mémoire. En production : tables `channels` et `pairing_codes`."""
+
+    channels: dict[tuple[str, str], Channel] = field(default_factory=dict)
+    pending: dict[str, PairingCode] = field(default_factory=dict)
+
+    # --- côté dashboard ---------------------------------------------------
+
+    def issue_code(self, user_id: str, now: datetime | None = None) -&gt; str:
+        """Génère un code à 6 chiffres. Un seul code actif par utilisateur."""
+        now = now or datetime.now(timezone.utc)
+        self._purge(now)
+        for code, pending in list(self.pending.items()):
+            if pending.user_id == user_id:
+                del self.pending[code]
+
+        # secrets, pas random : un générateur prévisible rendrait le code devinable.
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        self.pending[code] = PairingCode(code, user_id, now)
+        return code
+
+    # --- côté canal -------------------------------------------------------
+
+    def redeem(
+        self, submitted: str, kind: str, external_id: str, now: datetime | None = None
+    ) -&gt; Channel:
+        """Consomme un code et enregistre le canal. Lève PairingError sinon."""
+        now = now or datetime.now(timezone.utc)
+        self._purge(now)
+
+        submitted = submitted.strip().replace(" ", "")
+        match = None
+        for code, pending in self.pending.items():
+            # Comparaison à temps constant sur tous les candidats : sortir tôt
+            # sur le premier écart révélerait le code par mesure du temps.
+            if hmac.compare_digest(code, submitted):
+                match = pending
+
+        if match is None:
+            self._count_failure(now)
+            raise PairingError("Code invalide ou expiré.")
+
+        if match.consumed:
+            raise PairingError("Code déjà utilisé.")
+
+        match.attempts += 1
+        if match.attempts &gt; MAX_ATTEMPTS:
+            del self.pending[match.code]
+            raise PairingError("Trop de tentatives. Génère un nouveau code.")
+
+        match.consumed = True
+        del self.pending[match.code]
+
+        channel = Channel(match.user_id, kind, external_id, now)
+        self.channels[(kind, external_id)] = channel
+        return channel
+
+    def get_verified(self, kind: str, external_id: str) -&gt; Channel | None:
+        """Renvoie le canal appairé, ou None. Un None signifie : ignorer en silence."""
+        channel = self.channels.get((kind, external_id))
+        if channel is None or not channel.active:
+            return None
+        return channel
+
+    def revoke(self, kind: str, external_id: str) -&gt; bool:
+        channel = self.channels.get((kind, external_id))
+        if channel is None:
+            return False
+        channel.active = False
+        return True
+
+    # --- interne ----------------------------------------------------------
+
+    def _purge(self, now: datetime) -&gt; None:
+        for code, pending in list(self.pending.items()):
+            if pending.is_expired(now):
+                del self.pending[code]
+
+    def _count_failure(self, now: datetime) -&gt; None:
+        """Un mauvais code consomme un essai sur tous les codes en attente.
+
+        Empêche de balayer l'espace des codes en profitant du fait qu'un échec
+        sur un code ne coûte rien aux autres.
+        """
+        for pending in list(self.pending.values()):
+            pending.attempts += 1
+            if pending.attempts &gt; MAX_ATTEMPTS:
+                self.pending.pop(pending.code, None)
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head">
+    <code class="path">core/core/api/oauth.py</code>
+    <button class="copy" data-target="f6">Copier</button>
+  </div>
+  <pre id="f6"><code>"""Routes OAuth — le bout manquant entre l'URL d'autorisation et le store.
+
+Le paramètre `state` est le seul rempart contre le CSRF sur ce flux : sans lui,
+un attaquant peut faire connecter *son* compte Google au compte Nova de la
+victime, et lire ensuite tout ce que l'agent y écrit. On le signe donc (HMAC),
+on y met l'identité attendue, et on le fait expirer.
+"""
+
+from __future__ import annotations
+
+import base64
+import hmac
+import hashlib
+import json
+import time
+from dataclasses import dataclass
+
+STATE_TTL_SECONDS = 600
+
+
+class StateError(RuntimeError):
+    """State absent, altéré, expiré, ou destiné à un autre utilisateur."""
+
+
+def _b64e(raw: bytes) -&gt; str:
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _b64d(text: str) -&gt; bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def sign_state(user_id: str, secret: str, now: float | None = None) -&gt; str:
+    payload = {
+        "uid": user_id,
+        "iat": int(now if now is not None else time.time()),
+        "nonce": _b64e(hashlib.sha256(f"{user_id}{time.time_ns()}".encode()).digest()[:12]),
+    }
+    body = _b64e(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
+    signature = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{body}.{signature}"
+
+
+def verify_state(state: str, secret: str, now: float | None = None) -&gt; str:
+    """Renvoie l'user_id porté par le state. Lève StateError sinon."""
+    if not state or "." not in state:
+        raise StateError("state absent ou malformé")
+
+    body, _, signature = state.partition(".")
+    expected = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(expected, signature):
+        raise StateError("signature du state invalide")
+
+    try:
+        payload = json.loads(_b64d(body))
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise StateError("contenu du state illisible") from exc
+
+    now = now if now is not None else time.time()
+    if now - float(payload.get("iat", 0)) &gt; STATE_TTL_SECONDS:
+        raise StateError("state expiré")
+
+    user_id = payload.get("uid")
+    if not user_id:
+        raise StateError("state sans identité")
+    return user_id
+
+
+@dataclass
+class OAuthConfig:
+    client_id: str
+    client_secret: str
+    redirect_uri: str
+    state_secret: str
+
+
+async def handle_callback(
+    config: OAuthConfig,
+    transport,
+    store,
+    code: str,
+    state: str,
+    session_user_id: str | None = None,
+    now: float | None = None,
+) -&gt; str:
+    """Échange le code contre des jetons et les enregistre chiffrés.
+
+    `session_user_id` est l'utilisateur connecté au moment du retour. S'il ne
+    correspond pas au state, on refuse : c'est exactement la signature d'une
+    attaque par confusion de compte.
+    """
+    from ..integrations.google_oauth import exchange_code
+
+    user_id = verify_state(state, config.state_secret, now)
+    if session_user_id is not None and session_user_id != user_id:
+        raise StateError("le state ne correspond pas à l'utilisateur connecté")
+
+    credentials = await exchange_code(
+        transport,
+        code,
+        config.client_id,
+        config.client_secret,
+        config.redirect_uri,
+        now,
+    )
+    await store.save(user_id, credentials)
+    return user_id
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head">
+    <code class="path">core/core/api/main.py</code>
+    <button class="copy" data-target="f7">Copier</button>
+  </div>
+  <pre id="f7"><code>"""Application FastAPI — la porte d'entrée de tous les canaux.
+
+Le gateway ne contient aucune logique agentique : il authentifie, normalise,
+met en file, et rend la main. Tout le raisonnement vit dans le graphe.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+
+from fastapi import BackgroundTasks, FastAPI, Header, Request, Response
+
+from ..channels import ChannelRegistry
+from .webhooks import SeenCache, WebhookRejected, normalize_evolution, verify_signature
+
+log = logging.getLogger("nova.api")
+
+app = FastAPI(title="Nova Core", version="0.1.0")
+seen = SeenCache()
+channels = ChannelRegistry()  # à remplacer par la table `channels` en production
+
+WHATSAPP_SECRET = os.environ.get("NOVA_WHATSAPP_WEBHOOK_SECRET", "")
+
+
+@app.get("/health")
+async def health() -&gt; dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/webhooks/whatsapp")
+async def whatsapp_webhook(
+    request: Request,
+    background: BackgroundTasks,
+    x_hub_signature_256: str = Header(default=""),
+    x_hub_timestamp: str | None = Header(default=None),
+) -&gt; Response:
+    """Reçoit un message WhatsApp.
+
+    Répond systématiquement 200, même sur rejet : un code d'erreur déclencherait
+    des relances côté Meta/Evolution et révélerait la politique de filtrage.
+    """
+    body = await request.body()
+
+    try:
+        verify_signature(body, x_hub_signature_256, WHATSAPP_SECRET, x_hub_timestamp)
+    except WebhookRejected as exc:
+        log.warning("webhook refusé: %s", exc)
+        return Response(status_code=200)
+
+    payload = await request.json()
+    message = normalize_evolution(payload)
+    if message is None:
+        return Response(status_code=200)
+
+    if not seen.check_and_add(message.id):
+        log.info("message déjà traité, ignoré: %s", message.id)
+        return Response(status_code=200)
+
+    channel = channels.get_verified("whatsapp", message.from_number)
+    if channel is None:
+        # Un numéro inconnu envoie peut-être son code d'appairage.
+        if message.kind == "text" and message.text:
+            paired = _try_pairing(message.text, message.from_number)
+            if paired:
+                return Response(status_code=200)
+        log.info("numéro non appairé, ignoré")
+        return Response(status_code=200)
+
+    # ACK immédiat, traitement asynchrone : au-delà de 5 s, l'émetteur retente.
+    background.add_task(handle_message, channel.user_id, message)
+    return Response(status_code=200)
+
+
+def _try_pairing(text: str, number: str) -&gt; bool:
+    """Tente d'interpréter le message comme un code d'appairage à 6 chiffres."""
+    candidate = text.strip().replace(" ", "")
+    if not (candidate.isdigit() and len(candidate) == 6):
+        return False
+    try:
+        channels.redeem(candidate, "whatsapp", number)
+    except Exception as exc:  # PairingError et dérivés
+        log.info("appairage refusé: %s", exc)
+        return False
+    log.info("canal WhatsApp appairé")
+    return True
+
+
+async def handle_message(user_id: str, message) -&gt; None:
+    """Point d'entrée du pipeline : normalisation, graphe, réponse.
+
+    À câbler sur la file ARQ/Celery en production — un BackgroundTask meurt avec
+    le processus, ce qui est acceptable en développement seulement.
+    """
+    raise NotImplementedError("à câbler sur le worker")
+</code></pre>
+</section>
+<section class="file">
+  <div class="file-head">
+    <code class="path">core/tests/conftest.py</code>
+    <button class="copy" data-target="f8">Copier</button>
+  </div>
+  <pre id="f8"><code>"""Double de transport HTTP : les tests n'ouvrent jamais de connexion réseau."""
 
 from __future__ import annotations
 
@@ -1818,9 +2946,9 @@ def transport_factory():
 <section class="file">
   <div class="file-head">
     <code class="path">core/tests/test_google_oauth.py</code>
-    <button class="copy" data-target="f5">Copier</button>
+    <button class="copy" data-target="f9">Copier</button>
   </div>
-  <pre id="f5"><code>import asyncio
+  <pre id="f9"><code>import asyncio
 
 import pytest
 
@@ -1949,9 +3077,9 @@ def test_token_expiring_within_the_skew_is_refreshed_early():
 <section class="file">
   <div class="file-head">
     <code class="path">core/tests/test_google_calendar.py</code>
-    <button class="copy" data-target="f6">Copier</button>
+    <button class="copy" data-target="f10">Copier</button>
   </div>
-  <pre id="f6"><code>import asyncio
+  <pre id="f10"><code>import asyncio
 from datetime import datetime, timezone
 
 import pytest
@@ -2174,19 +3302,237 @@ def test_client_error_surfaces_the_google_message():
         run(request_with_retry(transport, "GET", "https://x/y", sleep=transport.sleep))
 </code></pre>
 </section>
+<section class="file">
+  <div class="file-head">
+    <code class="path">core/tests/test_store_channels.py</code>
+    <button class="copy" data-target="f11">Copier</button>
+  </div>
+  <pre id="f11"><code>import asyncio
+import base64
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from core.api.oauth import OAuthConfig, StateError, handle_callback, sign_state, verify_state
+from core.channels import ChannelRegistry, PairingError
+from core.integrations.google_oauth import GoogleCredentials
+from core.integrations.http import Response
+from core.security.crypto import CryptoError, generate_key
+from core.store import EncryptedCredentialStore, InMemoryBackend, UnknownIntegration
+from conftest import FakeTransport, always
+
+KEY = base64.urlsafe_b64decode(generate_key())
+NOW = 1_800_000_000.0
+T0 = datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+def make_store(backend=None) -&gt; EncryptedCredentialStore:
+    return EncryptedCredentialStore(backend or InMemoryBackend(), KEY)
+
+
+# --- store chiffré ---------------------------------------------------------
+
+def test_roundtrip_through_the_store():
+    store = make_store()
+    creds = GoogleCredentials("at-1", "rt-1", NOW + 3600)
+    run(store.save("u1", creds))
+    loaded = run(store.load("u1"))
+    assert loaded.access_token == "at-1"
+    assert loaded.refresh_token == "rt-1"
+
+
+def test_tokens_are_never_written_in_clear():
+    backend = InMemoryBackend()
+    store = make_store(backend)
+    run(store.save("u1", GoogleCredentials("at-secret", "rt-secret", NOW)))
+    blob = repr(backend.rows["u1:google"]).encode()
+    assert b"at-secret" not in blob
+    assert b"rt-secret" not in blob
+
+
+def test_expiry_stays_readable_without_decrypting():
+    backend = InMemoryBackend()
+    run(make_store(backend).save("u1", GoogleCredentials("at", "rt", NOW + 42)))
+    assert backend.rows["u1:google"]["expires_at"] == NOW + 42
+
+
+def test_row_of_another_user_cannot_be_decrypted():
+    """Un accès en écriture à la base ne permet pas de déplacer un jeton."""
+    backend = InMemoryBackend()
+    store = make_store(backend)
+    run(store.save("victime", GoogleCredentials("at", "rt", NOW)))
+    backend.rows["attaquant:google"] = dict(backend.rows["victime:google"])
+    with pytest.raises(CryptoError):
+        run(store.load("attaquant"))
+
+
+def test_missing_integration_is_explicit():
+    with pytest.raises(UnknownIntegration, match="autoriser"):
+        run(make_store().load("inconnu"))
+
+
+def test_exists_reports_presence():
+    store = make_store()
+    assert run(store.exists("u1")) is False
+    run(store.save("u1", GoogleCredentials("at", "rt", NOW)))
+    assert run(store.exists("u1")) is True
+
+
+# --- state OAuth -----------------------------------------------------------
+
+def test_state_roundtrip():
+    state = sign_state("u1", "secret", NOW)
+    assert verify_state(state, "secret", NOW + 10) == "u1"
+
+
+def test_tampered_state_is_rejected():
+    state = sign_state("u1", "secret", NOW)
+    body, _, sig = state.partition(".")
+    forged = sign_state("attaquant", "secret", NOW).split(".")[0] + "." + sig
+    with pytest.raises(StateError, match="signature"):
+        verify_state(forged, "secret", NOW)
+
+
+def test_state_signed_with_another_secret_is_rejected():
+    with pytest.raises(StateError):
+        verify_state(sign_state("u1", "autre", NOW), "secret", NOW)
+
+
+def test_expired_state_is_rejected():
+    state = sign_state("u1", "secret", NOW)
+    with pytest.raises(StateError, match="expiré"):
+        verify_state(state, "secret", NOW + 601)
+
+
+def test_malformed_state_is_rejected():
+    for bad in ("", "sans-point", "aaaa.bbbb"):
+        with pytest.raises(StateError):
+            verify_state(bad, "secret", NOW)
+
+
+# --- callback --------------------------------------------------------------
+
+def config() -&gt; OAuthConfig:
+    return OAuthConfig("cid", "csecret", "https://nova.fr/cb", "state-secret")
+
+
+def token_response():
+    return always(Response(200, {"access_token": "at-1", "refresh_token": "rt-1", "expires_in": 3600}))
+
+
+def test_callback_stores_credentials():
+    store = make_store()
+    state = sign_state("u1", "state-secret", NOW)
+    user = run(handle_callback(config(), FakeTransport(token_response()), store, "code", state, "u1", NOW))
+    assert user == "u1"
+    assert run(store.load("u1")).access_token == "at-1"
+
+
+def test_callback_refuses_account_confusion():
+    """Sans ce contrôle, on connecte le Google d'un attaquant au Nova de la victime."""
+    store = make_store()
+    state = sign_state("attaquant", "state-secret", NOW)
+    with pytest.raises(StateError, match="ne correspond pas"):
+        run(handle_callback(config(), FakeTransport(token_response()), store, "code", state, "victime", NOW))
+
+
+def test_callback_does_not_store_on_invalid_state():
+    store = make_store()
+    with pytest.raises(StateError):
+        run(handle_callback(config(), FakeTransport(token_response()), store, "code", "bidon", None, NOW))
+    assert run(store.exists("u1")) is False
+
+
+# --- appairage des canaux --------------------------------------------------
+
+def test_pairing_registers_the_channel():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    channel = reg.redeem(code, "whatsapp", "33612345678", T0)
+    assert channel.user_id == "u1"
+    assert reg.get_verified("whatsapp", "33612345678") is channel
+
+
+def test_unknown_number_is_not_verified():
+    """Le webhook doit pouvoir ignorer un inconnu en silence."""
+    assert ChannelRegistry().get_verified("whatsapp", "33699999999") is None
+
+
+def test_code_is_single_use():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    reg.redeem(code, "whatsapp", "33612345678", T0)
+    with pytest.raises(PairingError):
+        reg.redeem(code, "whatsapp", "33600000000", T0)
+
+
+def test_expired_code_is_refused():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    with pytest.raises(PairingError):
+        reg.redeem(code, "whatsapp", "33612345678", T0 + timedelta(minutes=11))
+
+
+def test_wrong_code_is_refused():
+    reg = ChannelRegistry()
+    reg.issue_code("u1", T0)
+    with pytest.raises(PairingError, match="invalide"):
+        reg.redeem("000000", "whatsapp", "33612345678", T0)
+
+
+def test_brute_force_burns_the_code():
+    """100 000 combinaisons se testent vite : le code doit mourir avant."""
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    for _ in range(6):
+        with pytest.raises(PairingError):
+            reg.redeem("999999", "whatsapp", "33612345678", T0)
+    with pytest.raises(PairingError):
+        reg.redeem(code, "whatsapp", "33612345678", T0)
+
+
+def test_issuing_a_new_code_invalidates_the_previous_one():
+    reg = ChannelRegistry()
+    first = reg.issue_code("u1", T0)
+    reg.issue_code("u1", T0)
+    with pytest.raises(PairingError):
+        reg.redeem(first, "whatsapp", "33612345678", T0)
+
+
+def test_code_format():
+    code = ChannelRegistry().issue_code("u1", T0)
+    assert len(code) == 6 and code.isdigit()
+
+
+def test_spaces_in_submitted_code_are_tolerated():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    spaced = f"{code[:3]} {code[3:]}"
+    assert reg.redeem(spaced, "whatsapp", "33612345678", T0).user_id == "u1"
+
+
+def test_revoked_channel_stops_being_verified():
+    reg = ChannelRegistry()
+    code = reg.issue_code("u1", T0)
+    reg.redeem(code, "whatsapp", "33612345678", T0)
+    assert reg.revoke("whatsapp", "33612345678") is True
+    assert reg.get_verified("whatsapp", "33612345678") is None
+</code></pre>
+</section>
 </div>
 
 <script>
 function copyFrom(el, btn, label) {
-  const text = el.innerText;
-  navigator.clipboard.writeText(text).then(function () {
+  navigator.clipboard.writeText(el.innerText).then(function () {
     const old = btn.textContent;
     btn.textContent = label;
     btn.classList.add('done');
     setTimeout(function () { btn.textContent = old; btn.classList.remove('done'); }, 2200);
-  }).catch(function () {
-    btn.textContent = 'Sélectionne et Ctrl+C';
-  });
+  }).catch(function () { btn.textContent = 'Sélectionne et Ctrl+C'; });
 }
 document.getElementById('copyScript').addEventListener('click', function () {
   copyFrom(document.getElementById('script'), this, 'Copié — colle dans PowerShell');

@@ -23,13 +23,16 @@ Ce qui est implémenté et couvert par des tests :
 | `core/integrations/http.py` | Retry avec backoff, `Retry-After`, quotas Google (403 = 429) |
 | `core/security/crypto.py` | Chiffrement AES-GCM des tokens OAuth, AAD anti-substitution |
 | `core/api/webhooks.py` | Signature HMAC, anti-rejeu, déduplication, normalisation Evolution |
+| `core/api/oauth.py` | State signé anti-CSRF, callback, refus de confusion de compte |
+| `core/store.py` | Store de jetons chiffré, expiration en clair |
+| `core/channels.py` | Appairage par code à 6 chiffres, usage unique, anti-force brute |
 
 Ce qui reste à câbler, marqué `NotImplementedError` dans le code :
 
-- `get_verified_channel` — appairage des numéros WhatsApp (table `channels`)
 - `handle_message` — pipeline complet, à brancher sur ARQ
+- Le remplacement des registres en mémoire par les tables Postgres
 - Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
-- Le câblage OAuth de bout en bout : route `/oauth/google/callback` et `CredentialStore` chiffré
+
 - Les nœuds LLM du graphe (router Haiku, planner Opus)
 - Migrations Alembic
 
@@ -67,7 +70,7 @@ document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse c
 
 ## Tests
 
-92 tests, aucune dépendance réseau — `InMemoryCalendar` et le registre d'outils
+116 tests, aucune dépendance réseau — `InMemoryCalendar` et le registre d'outils
 permettent d'exercer tout le graphe hors ligne.
 
 `FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et
@@ -78,7 +81,8 @@ Les cas qui comptent : `test_execution_suspends_before_sending` (rien ne part av
 validation), `test_completed_tasks_are_not_replayed_on_resume`,
 `test_blob_cannot_be_moved_to_another_user`, `test_adjacent_events_do_not_conflict`,
 `test_conflict_on_retry_is_treated_as_success`, `test_refresh_preserves_the_refresh_token`,
-`test_all_day_events_are_not_read_as_timestamps`.
+`test_all_day_events_are_not_read_as_timestamps`, `test_callback_refuses_account_confusion`,
+`test_brute_force_burns_the_code`, `test_tokens_are_never_written_in_clear`.
 
 ## Le provider Google en trois points non devinables
 
