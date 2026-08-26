@@ -9,7 +9,7 @@ from core.integrations.google_oauth import (
     refresh_access_token,
 )
 from core.integrations.http import Response
-from conftest import FakeTransport, always, sequence
+from conftest import FakeTransport, always
 CLIENT_ID = "client-123"
 CLIENT_SECRET = "secret-456"
 NOW = 1_800_000_000.0

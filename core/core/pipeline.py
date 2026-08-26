@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Protocol
 
 from .approvals import ApprovalRegistry, PendingApproval
 from .gate import classify_reply, format_approval_summary

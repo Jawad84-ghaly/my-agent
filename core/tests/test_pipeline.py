@@ -1,7 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-import pytest
 
 from core.approvals import ApprovalRegistry
 from core.messaging import ChannelFormatter, RecordingSender, split_message, to_whatsapp
