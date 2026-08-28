@@ -15,7 +15,12 @@ dependencies = [
 agent = ["langgraph>=0.2", "langchain-anthropic>=0.2", "anthropic>=0.39"]
 db = ["sqlalchemy>=2.0", "alembic>=1.13", "asyncpg>=0.30", "pgvector>=0.3"]
 worker = ["arq>=0.26", "redis>=5.1"]
-dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7,<0.16"]
+# Les tests exercent la couche de persistance sur SQLite : sqlalchemy, alembic
+# et aiosqlite sont donc requis pour la suite, pas seulement en production.
+dev = [
+  "pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7,<0.16",
+  "sqlalchemy>=2.0", "alembic>=1.13", "aiosqlite>=0.20",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

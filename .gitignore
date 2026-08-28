@@ -7,3 +7,4 @@
 venv/
 .env
 infra/.env
+core/.tmp_mig.db
