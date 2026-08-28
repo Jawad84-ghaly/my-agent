@@ -37,14 +37,33 @@ Ce qui est implémenté et couvert par des tests :
 | `core/db/session.py` | Moteur, sessions, portée transactionnelle |
 | `alembic/` | Migrations — `alembic upgrade head` |
 | `core/api/main.py` | Gateway FastAPI : webhook WhatsApp sur les registres Postgres, mise en file ARQ, flow OAuth Google |
+| `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google — la seule intégration avec un vrai backend |
 
 Ce qui reste à câbler :
 
-- Le câblage du `Pipeline` réel dans le worker (`core/workers.py`) — LLM,
-  outils et sender de production ; les jobs ARQ existent, pas encore la
-  construction du pipeline qu'ils appellent
 - Le déploiement réel : premier appel Anthropic facturé, instance WhatsApp
+- Gmail (`mail.draft`/`mail.send`) et People API (`contacts.resolve` sur de
+  vraies données) — le prompt du planificateur les référence déjà, mais
+  aucune des deux intégrations n'existe : un plan qui les invoque les voit
+  simplement écartés comme outils inconnus
 - Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
+
+## Le worker en production
+
+`handle_message_job` (`core/workers.py`) construit un `Pipeline` par message,
+pas un pipeline partagé au démarrage : ses outils calendrier sont fermés sur
+les identifiants Google de l'utilisateur du message (`ensure_fresh` + le
+`CredentialStore` chiffré), donc un pipeline construit une fois pour tout le
+processus ferait fuiter l'agenda d'un utilisateur vers un autre. Ce qui *est*
+partagé entre jobs, construit une fois par `startup()` : le client Anthropic,
+le moteur DB, le transport HTTP, l'`EvolutionSender`.
+
+L'approbation en attente (`core/approvals.py`) est portée par
+`PostgresApprovalRegistry`, pas le registre en mémoire : deux jobs ARQ sont
+deux appels de fonction indépendants, potentiellement sur des workers
+différents. Un « ok » qui ne retrouverait pas la validation posée par le
+message précédent reviendrait à relancer une planification vide — exactement
+le mode de panne que la persistance devait éliminer.
 
 ## Flow OAuth Google
 
