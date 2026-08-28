@@ -16,7 +16,7 @@ from ..workers import Priority
 from .webhooks import WebhookRejected, normalize_evolution, verify_signature
 log = logging.getLogger("nova.api")
 WHATSAPP_SECRET = os.environ.get("NOVA_WHATSAPP_WEBHOOK_SECRET", "")
-REDIS_URL = os.environ.get("NOVA_REDIS_URL", "redis://localhost:6379")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 
 @asynccontextmanager

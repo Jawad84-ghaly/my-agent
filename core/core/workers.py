@@ -15,10 +15,24 @@ la file entière : c'est précisément ce qu'on veut éviter côté latence per�
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from enum import IntEnum
 
+try:
+    from arq.connections import RedisSettings
+except ImportError:  # arq optionnel en test/dev sans les extras "worker"
+    RedisSettings = None
+
 log = logging.getLogger("nova.worker")
+
+
+def _redis_settings():
+    """None laisse arq sur son défaut (localhost) — dev sans docker-compose."""
+    url = os.environ.get("REDIS_URL")
+    if RedisSettings is None or not url:
+        return None
+    return RedisSettings.from_dsn(url)
 
 
 class Priority(IntEnum):
@@ -110,6 +124,7 @@ class WorkerSettings:
     functions = [handle_message_job, purge_approvals_job, sync_calendars_job]
     on_startup = startup
     on_shutdown = shutdown
+    redis_settings = _redis_settings()
     queue_name = Priority.INTERACTIVE.queue
     max_jobs = 10
     job_timeout = 120
