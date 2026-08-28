@@ -3,20 +3,44 @@ Le gateway ne contient aucune logique agentique : il authentifie, normalise,
 met en file, et rend la main. Tout le raisonnement vit dans le graphe.
 """
 from __future__ import annotations
+import hmac
 import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from arq import create_pool
 from arq.connections import RedisSettings
-from fastapi import FastAPI, Header, Request, Response
-from ..db.repositories import PostgresChannelRegistry, PostgresSeenCache
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
+from ..db.repositories import PostgresChannelRegistry, PostgresCredentialStore, PostgresSeenCache
 from ..db.session import database_url, make_engine, make_session_factory, session_scope
+from ..integrations.google_oauth import build_authorization_url
+from ..integrations.http import HttpxTransport
+from ..security.crypto import load_master_key
 from ..workers import Priority
+from .oauth import OAuthConfig, StateError, handle_callback, sign_state
 from .webhooks import WebhookRejected, normalize_evolution, verify_signature
 log = logging.getLogger("nova.api")
 WHATSAPP_SECRET = os.environ.get("NOVA_WHATSAPP_WEBHOOK_SECRET", "")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+GOOGLE_CLIENT_ID = os.environ.get("NOVA_GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("NOVA_GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get("NOVA_GOOGLE_REDIRECT_URI", "")
+OAUTH_STATE_SECRET = os.environ.get("NOVA_OAUTH_STATE_SECRET", "")
+#: Nova n'a pas de login : ce secret tient lieu d'authentification sur
+#: `/oauth/google/start`. Sans lui, n'importe qui pourrait lier son propre
+#: compte Google à l'identité d'un autre utilisateur Nova via ce endpoint —
+#: exactement la confusion de compte que `handle_callback` refuse plus loin.
+OAUTH_START_SECRET = os.environ.get("NOVA_OAUTH_START_SECRET", "")
+
+
+def _oauth_config() -> OAuthConfig:
+    return OAuthConfig(
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        redirect_uri=GOOGLE_REDIRECT_URI,
+        state_secret=OAUTH_STATE_SECRET,
+    )
 
 
 @asynccontextmanager
@@ -41,6 +65,38 @@ app = FastAPI(title="Nova Core", version="0.1.0", lifespan=lifespan)
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/oauth/google/start")
+async def oauth_google_start(user_id: str, key: str) -> RedirectResponse:
+    """Démarre le flow Google pour `user_id`, protégé par le secret partagé."""
+    if not OAUTH_START_SECRET or not hmac.compare_digest(key, OAUTH_START_SECRET):
+        raise HTTPException(status_code=403, detail="clé invalide")
+    state = sign_state(user_id, OAUTH_STATE_SECRET)
+    url = build_authorization_url(GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI, state)
+    return RedirectResponse(url)
+
+
+@app.get("/oauth/google/callback")
+async def oauth_google_callback(request: Request, code: str, state: str) -> dict[str, str]:
+    """Échange le code contre des jetons et les enregistre chiffrés.
+
+    Aucun `session_user_id` à vérifier ici : l'identité vient du state, signé
+    et daté par `/oauth/google/start` — c'est ce endpoint-là qu'il faut
+    protéger contre la confusion de compte, pas celui-ci.
+    """
+    transport = HttpxTransport()
+    try:
+        async with session_scope(request.app.state.session_factory) as session:
+            store = PostgresCredentialStore(session, key=load_master_key())
+            try:
+                user_id = await handle_callback(_oauth_config(), transport, store, code, state)
+            except StateError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        await transport.aclose()
+    log.info("intégration Google connectée pour %s", user_id)
     return {"status": "ok"}
 
 
