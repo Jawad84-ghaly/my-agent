@@ -32,6 +32,11 @@ services:
       NOVA_MASTER_KEY: ${NOVA_MASTER_KEY:?génère-la avec python -m core.security.crypto --generate}
       NOVA_WHATSAPP_WEBHOOK_SECRET: ${NOVA_WHATSAPP_WEBHOOK_SECRET:?}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?}
+      NOVA_GOOGLE_CLIENT_ID: ${NOVA_GOOGLE_CLIENT_ID:?}
+      NOVA_GOOGLE_CLIENT_SECRET: ${NOVA_GOOGLE_CLIENT_SECRET:?}
+      NOVA_GOOGLE_REDIRECT_URI: ${NOVA_GOOGLE_REDIRECT_URI:?}
+      NOVA_OAUTH_STATE_SECRET: ${NOVA_OAUTH_STATE_SECRET:?}
+      NOVA_OAUTH_START_SECRET: ${NOVA_OAUTH_START_SECRET:?}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}

@@ -36,13 +36,26 @@ Ce qui est implémenté et couvert par des tests :
 | `core/db/repositories.py` | Registres durables : canaux, validations, dédup, jetons |
 | `core/db/session.py` | Moteur, sessions, portée transactionnelle |
 | `alembic/` | Migrations — `alembic upgrade head` |
+| `core/api/main.py` | Gateway FastAPI : webhook WhatsApp sur les registres Postgres, mise en file ARQ, flow OAuth Google |
 
-Ce qui reste à câbler, marqué `NotImplementedError` dans le code :
+Ce qui reste à câbler :
 
-- Le câblage de `main.py` sur les registres Postgres (les deux implémentations
-  coexistent : mémoire pour les tests, base pour la production)
+- Le câblage du `Pipeline` réel dans le worker (`core/workers.py`) — LLM,
+  outils et sender de production ; les jobs ARQ existent, pas encore la
+  construction du pipeline qu'ils appellent
 - Le déploiement réel : premier appel Anthropic facturé, instance WhatsApp
 - Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
+
+## Flow OAuth Google
+
+`GET /oauth/google/start?user_id=...&key=...` puis `GET /oauth/google/callback`.
+Nova n'a pas de dashboard ni de login : `key` (comparée à
+`NOVA_OAUTH_START_SECRET` à temps constant) tient lieu d'authentification sur
+`/start` — sans elle, n'importe qui pourrait lier son propre compte Google à
+l'identité d'un autre utilisateur Nova. Le `state` qui en ressort est signé
+(`NOVA_OAUTH_STATE_SECRET`) et expire en 10 minutes ; c'est lui, pas
+`/callback`, qui porte la garantie anti-confusion de compte. Variables
+requises : voir `infra/.env.example`.
 
 
 
