@@ -55,16 +55,41 @@ def resource_lock(user_id: str, resource: str) -> str:
 
 @dataclass
 class JobContext:
-    """Dépendances injectées dans les jobs au démarrage du worker."""
+    """Ressources partagées par tous les jobs, construites une fois au démarrage.
 
-    pipeline: object
-    registry: object
-    approvals: object
+    Pas de `Pipeline` tout fait ici : ses outils calendrier dépendent des
+    identifiants Google d'un utilisateur précis (`access_token_provider` clôt
+    sur son `user_id`), donc `handle_message_job` en construit un neuf à
+    chaque message plutôt que d'en partager un entre utilisateurs.
+    """
+
+    session_factory: object
+    sender: object
+    http_transport: object
+    anthropic_client: object | None
+    google_client_id: str
+    google_client_secret: str
+    master_key: bytes | None
+    engine: object | None = None
+    calendar_provider: object | None = None  # utilisé par sync_calendars_job
 
 
 async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
-    """Job P0 : traite un message entrant de bout en bout."""
-    from .pipeline import IncomingMessage
+    """Job P0 : traite un message entrant de bout en bout.
+
+    Construit un `Pipeline` propre à ce message : les outils calendrier sont
+    fermés sur les identifiants Google de `user_id`, donc un registre partagé
+    entre jobs ferait fuiter l'agenda d'un utilisateur vers un autre.
+    """
+    from .db.repositories import PostgresApprovalRegistry, PostgresCredentialStore
+    from .db.session import session_scope
+    from .integrations.google_oauth import ensure_fresh
+    from .llm import build_nodes
+    from .messaging import ChannelFormatter
+    from .pipeline import IncomingMessage, Pipeline
+    from .providers.google_calendar import GoogleCalendar
+    from .tools.calendar_tools import register_calendar_tools
+    from .tools.registry import ToolRegistry
 
     deps: JobContext = ctx["deps"]
     message = IncomingMessage(
@@ -77,13 +102,53 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
         text=payload.get("text"),
         media_url=payload.get("media_url"),
     )
-    return await deps.pipeline.handle(message)
+
+    if deps.anthropic_client is None:
+        log.error("ANTHROPIC_API_KEY absent : message %s abandonné", message.id)
+        body = "⚠️ Configuration incomplète côté serveur, contacte l'administrateur."
+        for chunk in ChannelFormatter(message.channel).render(body):
+            await deps.sender.send_text(message.from_id, chunk)
+        return body
+
+    async with session_scope(deps.session_factory) as session:
+        tools = ToolRegistry()
+        integrations: list[str] = []
+
+        if deps.google_client_id and deps.master_key:
+            store = PostgresCredentialStore(session, key=deps.master_key)
+
+            async def _access_token() -> str:
+                creds = await ensure_fresh(
+                    deps.http_transport,
+                    store,
+                    user_id,
+                    deps.google_client_id,
+                    deps.google_client_secret,
+                )
+                return creds.access_token
+
+            provider = GoogleCalendar(deps.http_transport, _access_token)
+            register_calendar_tools(tools, provider)
+            integrations.append("google_calendar")
+
+        router, planner, responder = build_nodes(
+            deps.anthropic_client, frozenset(tools.tools), integrations=integrations
+        )
+        pipeline = Pipeline(
+            tools=tools,
+            router=router,
+            planner=planner,
+            responder=responder,
+            sender=deps.sender,
+            approvals=PostgresApprovalRegistry(session),
+        )
+        return await pipeline.handle(message)
 
 
 async def purge_approvals_job(ctx: dict) -> int:
     """Job P2 : retire les validations périmées. L'agent ne relance jamais."""
     deps: JobContext = ctx["deps"]
-    removed = deps.approvals.purge()
+    removed = await deps.approvals.purge()
     if removed:
         log.info("%d validation(s) expirée(s) purgée(s)", removed)
     return removed
@@ -107,10 +172,55 @@ async def sync_calendars_job(ctx: dict, user_id: str) -> int:
 
 
 async def startup(ctx: dict) -> None:
+    """Construit les ressources longue durée du processus, une fois pour tous les jobs."""
+    from .db.session import database_url, make_engine, make_session_factory
+    from .integrations.http import HttpxTransport
+    from .messaging import EvolutionSender
+
+    engine = make_engine(database_url())
+    http_transport = HttpxTransport()
+
+    anthropic_client = None
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        import anthropic  # noqa: PLC0415 — extra "agent" optionnel
+
+        anthropic_client = anthropic.AsyncAnthropic(api_key=anthropic_key)
+    else:
+        log.warning("ANTHROPIC_API_KEY absent : les messages seront refusés poliment")
+
+    master_key = None
+    try:
+        from .security.crypto import load_master_key
+
+        master_key = load_master_key()
+    except Exception as exc:  # noqa: BLE001 — clé absente : dégrade, ne bloque pas WhatsApp
+        log.warning("NOVA_MASTER_KEY absent ou invalide (%s) : pas d'outils Google", exc)
+
+    ctx["deps"] = JobContext(
+        session_factory=make_session_factory(engine),
+        sender=EvolutionSender(
+            transport=http_transport,
+            base_url=os.environ.get("NOVA_EVOLUTION_URL", ""),
+            instance=os.environ.get("NOVA_EVOLUTION_INSTANCE", ""),
+            api_key=os.environ.get("NOVA_EVOLUTION_API_KEY", ""),
+        ),
+        http_transport=http_transport,
+        anthropic_client=anthropic_client,
+        google_client_id=os.environ.get("NOVA_GOOGLE_CLIENT_ID", ""),
+        google_client_secret=os.environ.get("NOVA_GOOGLE_CLIENT_SECRET", ""),
+        master_key=master_key,
+        engine=engine,
+    )
     log.info("worker démarré")
 
 
 async def shutdown(ctx: dict) -> None:
+    deps: JobContext | None = ctx.get("deps")
+    if deps is not None:
+        await deps.http_transport.aclose()
+        if deps.engine is not None:
+            await deps.engine.dispose()
     log.info("worker arrêté")
 
 

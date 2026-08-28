@@ -50,9 +50,15 @@ services:
       REDIS_URL: redis://redis:6379/0
       NOVA_MASTER_KEY: ${NOVA_MASTER_KEY:?}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?}
+      NOVA_GOOGLE_CLIENT_ID: ${NOVA_GOOGLE_CLIENT_ID:?}
+      NOVA_GOOGLE_CLIENT_SECRET: ${NOVA_GOOGLE_CLIENT_SECRET:?}
+      NOVA_EVOLUTION_URL: http://evolution:8080
+      NOVA_EVOLUTION_INSTANCE: ${NOVA_EVOLUTION_INSTANCE:?nom de l'instance Evolution, créée via son API}
+      NOVA_EVOLUTION_API_KEY: ${EVO_KEY:?}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
+      evolution: {condition: service_started}
 
   evolution:
     image: atendai/evolution-api:v2

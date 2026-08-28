@@ -78,7 +78,7 @@ class Pipeline:
         if text is None:
             return await self._reply(message, formatter, "🎤 Je n'ai pas bien saisi, tu peux répéter ?")
 
-        pending = self.approvals.get(message.thread_id, now)
+        pending = await self.approvals.get(message.thread_id, now)
         if pending is not None:
             return await self._resume(message, formatter, pending, text, now)
 
@@ -107,16 +107,16 @@ class Pipeline:
         decision = classify_reply(text)
 
         if decision == "reject":
-            self.approvals.pop(message.thread_id, now)
+            await self.approvals.pop(message.thread_id, now)
             return await self._reply(message, formatter, "OK, annulé.")
 
         if decision == "edit":
             # L'utilisateur veut autre chose : on abandonne le plan suspendu et
             # on replanifie à partir de sa correction, plutôt que de deviner.
-            self.approvals.pop(message.thread_id, now)
+            await self.approvals.pop(message.thread_id, now)
             return await self._fresh_request(message, formatter, text, now)
 
-        self.approvals.pop(message.thread_id, now)
+        await self.approvals.pop(message.thread_id, now)
         state = ExecutionState(
             results=dict(pending.results), completed=list(pending.completed)
         )
@@ -164,7 +164,7 @@ class Pipeline:
             approval = state.pending_approval
             assert approval is not None
             summary = format_approval_summary(approval.task, approval.prepared)
-            self.approvals.put(
+            await self.approvals.put(
                 PendingApproval(
                     thread_id=message.thread_id,
                     user_id=message.user_id,

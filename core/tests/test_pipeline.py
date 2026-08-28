@@ -122,7 +122,7 @@ def test_outbound_action_suspends_and_asks():
     run(pipe.handle(msg(), T0))
     assert "send" not in calls           # rien n'est parti
     assert "Prêt à envoyer" in sender.sent[0][1]
-    assert pipe.approvals.get("t1", T0) is not None
+    assert run(pipe.approvals.get("t1", T0)) is not None
 
 
 def test_ok_resumes_and_sends():
@@ -130,7 +130,7 @@ def test_ok_resumes_and_sends():
     run(pipe.handle(msg(), T0))
     run(pipe.handle(msg("ok"), T0 + timedelta(minutes=1)))
     assert "send" in calls
-    assert pipe.approvals.get("t1", T0) is None
+    assert run(pipe.approvals.get("t1", T0)) is None
 
 
 def test_resume_does_not_replay_completed_tasks():
@@ -169,9 +169,9 @@ def test_expired_approval_is_not_honoured():
 def test_only_one_pending_approval_per_thread():
     pipe, _, _ = build(gated_plan())
     run(pipe.handle(msg(), T0))
-    first = pipe.approvals.get("t1", T0)
+    first = run(pipe.approvals.get("t1", T0))
     run(pipe.handle(msg("autre demande"), T0 + timedelta(minutes=1)))
-    assert pipe.approvals.get("t1", T0) is not first
+    assert run(pipe.approvals.get("t1", T0)) is not first
     assert len(pipe.approvals.pending) == 1
 
 
