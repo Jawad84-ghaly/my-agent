@@ -23,6 +23,18 @@ services:
       interval: 5s
       retries: 10
 
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      NOVA_DOMAIN: "${NOVA_DOMAIN:?domaine public pointant vers ce serveur (ex. nova.tondomaine.fr)}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports: ["80:80", "443:443"]
+    depends_on:
+      core: {condition: service_started}
+
   core:
     build: ../core
     command: uvicorn core.api.main:app --host 0.0.0.0 --port 8000
@@ -41,7 +53,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
-    ports: ["8000:8000"]
+    expose: ["8000"]
 
   worker:
     build: ../core
@@ -86,3 +98,5 @@ volumes:
   pgdata:
   redisdata:
   evodata:
+  caddy_data:
+  caddy_config:

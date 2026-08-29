@@ -1,0 +1,3 @@
+{$NOVA_DOMAIN} {
+	reverse_proxy core:8000
+}
