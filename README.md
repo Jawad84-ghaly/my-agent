@@ -6,6 +6,9 @@ Nova, assistant exécutif personnel polyvalent.
 
 - `web/index.html` — page de présentation autonome de Nova (aucune dépendance, s'ouvre
   directement dans un navigateur ; seules les polices Google Fonts sont chargées en ligne).
+- `core/` — backend agentique (voir `core/README.md`).
+- `app/` — client Android/iOS/Windows (voir `app/README.md`), contre le canal `app` du backend.
+- `infra/` — Docker Compose et configuration de déploiement.
 
 ## Utilisation
 

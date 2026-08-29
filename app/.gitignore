@@ -1,0 +1,15 @@
+# Générés par `flutter create` / `flutter build` — voir .github/workflows/build-app.yml,
+# qui les régénère à chaque build plutôt que de les committer.
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+android/
+ios/
+windows/
+linux/
+macos/
+web/
+*.iml
+.idea/
