@@ -96,12 +96,11 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
     from .pipeline import IncomingMessage, Pipeline
     from .providers.gmail import GmailProvider
     from .providers.google_calendar import GoogleCalendar
+    from .providers.google_people import GooglePeopleProvider
     from .providers.outlook_calendar import OutlookCalendar
     from .tools.calendar_tools import register_calendar_tools
-    from .tools.mail_tools import register_mail_tools
-    from .providers.google_people import GooglePeopleProvider
-    from .tools.calendar_tools import register_calendar_tools
     from .tools.contacts_tools import register_contacts_tools
+    from .tools.mail_tools import register_mail_tools
     from .tools.registry import ToolRegistry
 
     deps: JobContext = ctx["deps"]
@@ -149,6 +148,12 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             gmail = GmailProvider(deps.http_transport, _access_token, PostgresIdempotencyStore(session))
             register_mail_tools(tools, gmail)
             integrations.append("gmail")
+
+            # Même jeton Google, mêmes scopes (contacts.readonly déjà demandé
+            # par google_oauth.py) : pas de second CredentialStore.
+            people = GooglePeopleProvider(deps.http_transport, _access_token)
+            register_contacts_tools(tools, people)
+            integrations.append("contacts")
         elif deps.microsoft_client_id and deps.master_key:
             # `calendar.*` est un seul jeu d'outils dans le registre : un
             # déploiement sert soit Google, soit Microsoft pour le calendrier,
@@ -170,11 +175,6 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             )
             register_calendar_tools(tools, provider)
             integrations.append("outlook_calendar")
-            # Même jeton Google, mêmes scopes (contacts.readonly déjà demandé
-            # par google_oauth.py) : pas de second CredentialStore.
-            people = GooglePeopleProvider(deps.http_transport, _access_token)
-            register_contacts_tools(tools, people)
-            integrations.append("contacts")
 
         router, planner, responder = build_nodes(
             deps.anthropic_client, frozenset(tools.tools), integrations=integrations
