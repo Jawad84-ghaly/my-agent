@@ -92,16 +92,15 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
     from .integrations.google_oauth import ensure_fresh
     from .integrations.microsoft_oauth import ensure_fresh as ensure_fresh_microsoft
     from .llm import build_nodes
-    from .messaging import ChannelFormatter
+    from .messaging import ChannelFormatter, RecordingSender
     from .pipeline import IncomingMessage, Pipeline
     from .providers.gmail import GmailProvider
     from .providers.google_calendar import GoogleCalendar
+    from .providers.google_people import GooglePeopleProvider
     from .providers.outlook_calendar import OutlookCalendar
     from .tools.calendar_tools import register_calendar_tools
-    from .tools.mail_tools import register_mail_tools
-    from .providers.google_people import GooglePeopleProvider
-    from .tools.calendar_tools import register_calendar_tools
     from .tools.contacts_tools import register_contacts_tools
+    from .tools.mail_tools import register_mail_tools
     from .tools.registry import ToolRegistry
 
     deps: JobContext = ctx["deps"]
@@ -116,11 +115,16 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
         media_url=payload.get("media_url"),
     )
 
+    # Un client `app` attend sa réponse sur la requête HTTP qui l'a envoyée
+    # (voir `api/app_channel.py`) : la valeur de retour du job la lui porte
+    # déjà, il n'y a rien à pousser activement, contrairement à WhatsApp.
+    sender = deps.sender if message.channel == "whatsapp" else RecordingSender()
+
     if deps.anthropic_client is None:
         log.error("ANTHROPIC_API_KEY absent : message %s abandonné", message.id)
         body = "⚠️ Configuration incomplète côté serveur, contacte l'administrateur."
         for chunk in ChannelFormatter(message.channel).render(body):
-            await deps.sender.send_text(message.from_id, chunk)
+            await sender.send_text(message.from_id, chunk)
         return body
 
     async with session_scope(deps.session_factory) as session:
@@ -149,6 +153,12 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             gmail = GmailProvider(deps.http_transport, _access_token, PostgresIdempotencyStore(session))
             register_mail_tools(tools, gmail)
             integrations.append("gmail")
+
+            # Même jeton Google, mêmes scopes (contacts.readonly déjà demandé
+            # par google_oauth.py) : pas de second CredentialStore.
+            people = GooglePeopleProvider(deps.http_transport, _access_token)
+            register_contacts_tools(tools, people)
+            integrations.append("contacts")
         elif deps.microsoft_client_id and deps.master_key:
             # `calendar.*` est un seul jeu d'outils dans le registre : un
             # déploiement sert soit Google, soit Microsoft pour le calendrier,
@@ -170,11 +180,6 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             )
             register_calendar_tools(tools, provider)
             integrations.append("outlook_calendar")
-            # Même jeton Google, mêmes scopes (contacts.readonly déjà demandé
-            # par google_oauth.py) : pas de second CredentialStore.
-            people = GooglePeopleProvider(deps.http_transport, _access_token)
-            register_contacts_tools(tools, people)
-            integrations.append("contacts")
 
         router, planner, responder = build_nodes(
             deps.anthropic_client, frozenset(tools.tools), integrations=integrations
@@ -184,7 +189,7 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             router=router,
             planner=planner,
             responder=responder,
-            sender=deps.sender,
+            sender=sender,
             approvals=PostgresApprovalRegistry(session),
         )
         return await pipeline.handle(message)

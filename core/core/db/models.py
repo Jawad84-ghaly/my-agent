@@ -200,6 +200,23 @@ class SeenMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class DeviceToken(Base):
+    """Jeton d'un client applicatif natif (Android/iOS/Windows) — pas WhatsApp.
+
+    Émis une seule fois, à l'appairage, et montré en clair à cet instant-là
+    uniquement : seul son hash est conservé, comme un mot de passe. Sans
+    session ni login, ce jeton est la seule preuve d'identité que l'app
+    présente sur `/app/messages` — un jeton en clair en base serait
+    équivalent à stocker un mot de passe en clair.
+    """
+
+    __tablename__ = "device_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class IdempotencyRecord(Base):
     """Dédup des opérations sans id imposable côté client (Gmail, contrairement à Calendar).
 

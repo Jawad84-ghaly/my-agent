@@ -297,6 +297,25 @@ def test_contacts_resolve_is_offered_alongside_calendar():
     run(_with_deps(client, body))
 
 
+# --- canal `app` : réponse par valeur de retour, pas par push -------------
+
+
+def test_app_channel_does_not_push_through_the_whatsapp_sender():
+    """L'app attend sa réponse sur la requête HTTP (voir `api/app_channel.py`) :
+    `deps.sender` (Evolution/WhatsApp) ne doit jamais être sollicité pour elle."""
+    client = client_returning(ROUTE_TRIVIAL, "Bonjour ! Je peux t'aider ?")
+
+    async def body(deps, _transport):
+        ctx = {"deps": deps}
+        payload = {"id": "m1", "channel": "app", "from_id": "device-1", "kind": "text",
+                   "text": "bonjour"}
+        result = await handle_message_job(ctx, "u1", payload)
+        assert result == "Bonjour ! Je peux t'aider ?"
+        assert deps.sender.sent == []  # rien poussé côté WhatsApp
+
+    run(_with_deps(client, body))
+
+
 # --- dégradations gracieuses -------------------------------------------
 
 

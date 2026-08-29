@@ -12,6 +12,7 @@ qu'un portage absent.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import secrets
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ from ..channels import MAX_ATTEMPTS, PAIRING_TTL, Channel, PairingError
 from ..gate import APPROVAL_TTL
 from ..planning import Task
 from ..security.crypto import build_aad, decrypt_token, encrypt_token
-from .models import Approval, IdempotencyRecord, Integration
+from .models import Approval, DeviceToken, IdempotencyRecord, Integration
 from .models import Channel as ChannelRow
 from .models import PairingCode as PairingRow
 from .models import SeenMessage
@@ -289,6 +290,45 @@ class PostgresCredentialStore:
                 )
             )
         ).scalar_one_or_none()
+
+
+@dataclass
+class PostgresDeviceTokenStore:
+    """Jetons des apps natives (Android/iOS/Windows) — pas de session, pas de login.
+
+    Un jeton en clair en base équivaudrait à un mot de passe en clair : seul
+    son hash est stocké, comme pour un mot de passe. Le jeton lui-même n'est
+    montré qu'une fois, au moment de l'appairage.
+    """
+
+    session: AsyncSession
+
+    @staticmethod
+    def _hash(token: str) -> str:
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    async def issue(self, user_id: str, now: datetime | None = None) -> str:
+        token = secrets.token_urlsafe(32)
+        self.session.add(
+            DeviceToken(token_hash=self._hash(token), user_id=user_id, created_at=now or datetime.now(timezone.utc))
+        )
+        await self.session.flush()
+        return token
+
+    async def resolve(self, token: str) -> str | None:
+        row = (
+            await self.session.execute(
+                select(DeviceToken).where(DeviceToken.token_hash == self._hash(token))
+            )
+        ).scalar_one_or_none()
+        return row.user_id if row is not None else None
+
+    async def revoke(self, token: str) -> bool:
+        result = await self.session.execute(
+            delete(DeviceToken).where(DeviceToken.token_hash == self._hash(token))
+        )
+        await self.session.flush()
+        return bool(result.rowcount)
 
 
 @dataclass

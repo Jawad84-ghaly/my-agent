@@ -20,6 +20,7 @@ from ..integrations import microsoft_oauth
 from ..integrations.http import HttpxTransport
 from ..security.crypto import load_master_key
 from ..workers import Priority
+from .app_channel import router as app_channel_router
 from .oauth import OAuthConfig, StateError, handle_callback, sign_state
 from .webhooks import WebhookRejected, normalize_evolution, verify_signature
 log = logging.getLogger("nova.api")
@@ -78,6 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Nova Core", version="0.1.0", lifespan=lifespan)
+app.include_router(app_channel_router)
 
 
 @app.get("/health")
