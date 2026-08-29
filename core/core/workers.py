@@ -92,7 +92,7 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
     from .integrations.google_oauth import ensure_fresh
     from .integrations.microsoft_oauth import ensure_fresh as ensure_fresh_microsoft
     from .llm import build_nodes
-    from .messaging import ChannelFormatter
+    from .messaging import ChannelFormatter, RecordingSender
     from .pipeline import IncomingMessage, Pipeline
     from .providers.gmail import GmailProvider
     from .providers.google_calendar import GoogleCalendar
@@ -115,11 +115,16 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
         media_url=payload.get("media_url"),
     )
 
+    # Un client `app` attend sa réponse sur la requête HTTP qui l'a envoyée
+    # (voir `api/app_channel.py`) : la valeur de retour du job la lui porte
+    # déjà, il n'y a rien à pousser activement, contrairement à WhatsApp.
+    sender = deps.sender if message.channel == "whatsapp" else RecordingSender()
+
     if deps.anthropic_client is None:
         log.error("ANTHROPIC_API_KEY absent : message %s abandonné", message.id)
         body = "⚠️ Configuration incomplète côté serveur, contacte l'administrateur."
         for chunk in ChannelFormatter(message.channel).render(body):
-            await deps.sender.send_text(message.from_id, chunk)
+            await sender.send_text(message.from_id, chunk)
         return body
 
     async with session_scope(deps.session_factory) as session:
@@ -184,7 +189,7 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             router=router,
             planner=planner,
             responder=responder,
-            sender=deps.sender,
+            sender=sender,
             approvals=PostgresApprovalRegistry(session),
         )
         return await pipeline.handle(message)

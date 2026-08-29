@@ -45,6 +45,7 @@ Ce qui est implémenté et couvert par des tests :
 | `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google |
 | `core/providers/google_people.py` | Provider People réel — fournit de vrais candidats à `core/contacts.py` |
 | `core/tools/contacts_tools.py` | Outils `contacts.resolve`/`contacts.get` liés à ce provider |
+| `core/api/app_channel.py` | Canal `app` pour les clients natifs (Android/iOS/Windows) — appairage puis échange synchrone |
 
 Ce qui reste à câbler :
 
@@ -137,7 +138,29 @@ n'appelle `ChannelRegistry.issue_code`, ni dashboard ni CLI. Envoyer le code
 retourné depuis le numéro WhatsApp à appairer complète l'appairage via le
 webhook (`_try_pairing` dans `core/api/main.py`).
 
+## Canal `app` — clients natifs (Android/iOS/Windows)
 
+`core/api/app_channel.py`. Un client natif n'est pas WhatsApp : il attend sa
+réponse sur la requête HTTP qu'il vient d'envoyer, pas via un push asynchrone.
+Deux routes :
+
+- `POST /app/pair?code=...` — échange un code d'appairage (même mécanisme que
+  WhatsApp, `ChannelRegistry`) contre un jeton opaque, montré une seule fois.
+  Le jeton n'est jamais stocké en clair (`PostgresDeviceTokenStore`, table
+  `device_tokens`) — seul son hash SHA-256 l'est, comme un mot de passe.
+- `POST /app/messages?text=...` avec `Authorization: Bearer <jeton>` — met le
+  message en file comme d'habitude, puis attend le résultat du job ARQ
+  (`Job.result`, borné à 45 s) au lieu de rendre la main tout de suite :
+  `handle_message_job` renvoie déjà le texte de la réponse, ARQ n'a besoin de
+  rien de plus pour le faire remonter jusqu'à la requête HTTP.
+
+`handle_message_job` choisit l'émetteur selon le canal : WhatsApp continue de
+pousser via Evolution, mais le canal `app` n'a besoin de rien pousser — la
+réponse part par la valeur de retour, un `RecordingSender` local suffit donc.
+
+Pas de session ni de login, comme le reste de Nova : c'est le prix pour rester
+cohérent avec le reste du système plutôt que d'inventer une deuxième forme
+d'authentification pour ce seul canal.
 
 ## Démarrer
 
@@ -192,8 +215,7 @@ document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse c
 
 ## Tests
 
-216 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
-200 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
+232 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
 permettent d'exercer tout le graphe hors ligne.
 
 `FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et
