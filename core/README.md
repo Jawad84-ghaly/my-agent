@@ -103,6 +103,25 @@ python -m core.security.crypto --generate   # → NOVA_MASTER_KEY
 docker compose -f infra/docker-compose.yml up
 ```
 
+## TLS
+
+`caddy` termine le TLS devant `core` — c'est lui qui reçoit le webhook WhatsApp
+et le callback OAuth, pas `evolution` ni `worker`. Configuration minimale
+(`infra/Caddyfile`) :
+
+```
+{$NOVA_DOMAIN} {
+	reverse_proxy core:8000
+}
+```
+
+Caddy obtient et renouvelle le certificat Let's Encrypt automatiquement dès
+que `NOVA_DOMAIN` résout vers ce serveur et que les ports 80/443 sont
+ouverts — rien à générer à la main. `core` n'expose plus son port directement
+(`expose: ["8000"]`, pas `ports:`) : tout passe par Caddy. `NOVA_DOMAIN` et
+`PUBLIC_URL` portent le même hôte (l'un nu, l'autre avec le schéma) et
+doivent rester synchronisés — voir `infra/.env.example`.
+
 ## Les trois invariants
 
 Ils ne sont pas négociables — chacun correspond à une panne réelle de ce type de système.
