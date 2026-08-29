@@ -37,6 +37,7 @@ services:
       NOVA_GOOGLE_REDIRECT_URI: ${NOVA_GOOGLE_REDIRECT_URI:?}
       NOVA_OAUTH_STATE_SECRET: ${NOVA_OAUTH_STATE_SECRET:?}
       NOVA_OAUTH_START_SECRET: ${NOVA_OAUTH_START_SECRET:?}
+      NOVA_ADMIN_SECRET: ${NOVA_ADMIN_SECRET:?}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}

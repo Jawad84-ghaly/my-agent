@@ -76,6 +76,15 @@ l'identité d'un autre utilisateur Nova. Le `state` qui en ressort est signé
 `/callback`, qui porte la garantie anti-confusion de compte. Variables
 requises : voir `infra/.env.example`.
 
+## Appairer un premier numéro WhatsApp
+
+`POST /admin/pairing-code?user_id=...&key=...` — même schéma que
+`/oauth/google/start` (secret d'opérateur `NOVA_ADMIN_SECRET`, comparaison à
+temps constant). C'est le seul moyen d'obtenir un code : rien d'autre
+n'appelle `ChannelRegistry.issue_code`, ni dashboard ni CLI. Envoyer le code
+retourné depuis le numéro WhatsApp à appairer complète l'appairage via le
+webhook (`_try_pairing` dans `core/api/main.py`).
+
 
 
 ## Démarrer
