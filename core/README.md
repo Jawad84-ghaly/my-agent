@@ -41,6 +41,10 @@ Ce qui est implémenté et couvert par des tests :
 | `core/providers/gmail.py` | Provider Gmail réel : brouillon puis envoi, dédoublonnage applicatif faute d'id imposable côté Google |
 | `core/tools/mail_tools.py` | Outils `mail.draft`/`mail.send` liés à ce provider |
 | `core/providers/outlook_calendar.py` | Provider Microsoft Graph réel pour `calendar.*` — alternatif à Google, même dédoublonnage applicatif |
+| `core/api/main.py` | Gateway FastAPI : webhook WhatsApp sur les registres Postgres, mise en file ARQ, flow OAuth Google |
+| `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google |
+| `core/providers/google_people.py` | Provider People réel — fournit de vrais candidats à `core/contacts.py` |
+| `core/tools/contacts_tools.py` | Outils `contacts.resolve`/`contacts.get` liés à ce provider |
 
 Ce qui reste à câbler :
 
@@ -50,6 +54,12 @@ Ce qui reste à câbler :
   qui l'invoque le voit écarté comme outil inconnu
 - Le courrier Microsoft (Outlook Mail) — seul Calendar a un équivalent
   Microsoft pour l'instant ; `mail.*` reste Gmail uniquement
+- Gmail (`mail.draft`/`mail.send`) — le prompt du planificateur le référence
+  déjà, mais l'intégration n'existe pas : un plan qui l'invoque le voit
+  écarté comme outil inconnu
+- `contacts.recent_interactions` — nécessiterait de miner l'historique des
+  messages, pas le carnet d'adresses ; fonctionnalité distincte, non construite
+- Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
 
 ## Le worker en production
 
@@ -183,6 +193,7 @@ document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse c
 ## Tests
 
 216 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
+200 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
 permettent d'exercer tout le graphe hors ligne.
 
 `FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et

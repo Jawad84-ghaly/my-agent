@@ -269,6 +269,32 @@ def test_outlook_calendar_is_offered_when_microsoft_is_configured_instead_of_goo
         assert result == "Rien de prévu."
 
     run(_with_deps(client, body, google=False))
+# --- Contacts (People API) ----------------------------------------------
+
+
+def test_contacts_resolve_is_offered_alongside_calendar():
+    client = client_returning(
+        ROUTE_STANDARD,
+        {"tasks": [{"id": "T1", "tool": "contacts.resolve", "args": {"query": "Marc"},
+                    "depends_on": []}]},
+        "C'est Marc Dubois.",
+    )
+
+    def handler(request, _index):
+        assert request.url.endswith("/people/me/connections")
+        return Response(200, {"connections": [{
+            "resourceName": "people/c1",
+            "names": [{"displayName": "Marc Dubois"}],
+            "emailAddresses": [{"value": "marc@exemple.fr"}],
+        }]})
+
+    async def body(deps, _transport):
+        deps.http_transport = FakeTransport(handler)
+        ctx = {"deps": deps}
+        result = await handle_message_job(ctx, "u1", msg("qui est Marc ?"))
+        assert result == "C'est Marc Dubois."
+
+    run(_with_deps(client, body))
 
 
 # --- dégradations gracieuses -------------------------------------------
