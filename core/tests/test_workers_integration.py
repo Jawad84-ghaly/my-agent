@@ -188,6 +188,34 @@ def test_approval_survives_across_jobs():
     run(_with_deps(client, body))
 
 
+# --- Contacts (People API) ----------------------------------------------
+
+
+def test_contacts_resolve_is_offered_alongside_calendar():
+    client = client_returning(
+        ROUTE_STANDARD,
+        {"tasks": [{"id": "T1", "tool": "contacts.resolve", "args": {"query": "Marc"},
+                    "depends_on": []}]},
+        "C'est Marc Dubois.",
+    )
+
+    def handler(request, _index):
+        assert request.url.endswith("/people/me/connections")
+        return Response(200, {"connections": [{
+            "resourceName": "people/c1",
+            "names": [{"displayName": "Marc Dubois"}],
+            "emailAddresses": [{"value": "marc@exemple.fr"}],
+        }]})
+
+    async def body(deps, _transport):
+        deps.http_transport = FakeTransport(handler)
+        ctx = {"deps": deps}
+        result = await handle_message_job(ctx, "u1", msg("qui est Marc ?"))
+        assert result == "C'est Marc Dubois."
+
+    run(_with_deps(client, body))
+
+
 # --- dégradations gracieuses -------------------------------------------
 
 
