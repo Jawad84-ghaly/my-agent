@@ -1,0 +1,94 @@
+name: build-app
+
+# `flutter create --platforms=...` régénère les dossiers natifs (android/,
+# ios/, windows/) à chaque run plutôt que de les committer : c'est Flutter
+# lui-même qui produit ce squelette, pas une copie figée dans le dépôt qui
+# dériverait silencieusement des versions de Gradle/Xcode/CMake attendues.
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/build-app.yml"]
+  pull_request:
+    paths: ["app/**", ".github/workflows/build-app.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: build-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Générer le projet Android
+        working-directory: app
+        run: flutter create --platforms=android --org fr.nova .
+      - name: Dépendances
+        working-directory: app
+        run: flutter pub get
+      - name: Build APK
+        working-directory: app
+        run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nova-android
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Générer le projet Windows
+        working-directory: app
+        run: flutter create --platforms=windows --org fr.nova .
+      - name: Dépendances
+        working-directory: app
+        run: flutter pub get
+      - name: Build
+        working-directory: app
+        run: flutter build windows --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nova-windows
+          path: app/build/windows/x64/runner/Release/
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Générer le projet iOS
+        working-directory: app
+        run: flutter create --platforms=ios --org fr.nova .
+      - name: Dépendances
+        working-directory: app
+        run: flutter pub get
+      - name: Build (non signé)
+        working-directory: app
+        # Sans compte Apple Developer/certificat, impossible de produire un
+        # .ipa installable sur un vrai appareil : ce .app tourne dans le
+        # Simulateur, ou peut être signé a posteriori par qui a un compte.
+        run: flutter build ios --release --no-codesign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nova-ios-unsigned
+          path: app/build/ios/iphoneos/Runner.app
+          if-no-files-found: error
