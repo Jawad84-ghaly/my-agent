@@ -200,6 +200,22 @@ class SeenMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class IdempotencyRecord(Base):
+    """Dédup des opérations sans id imposable côté client (Gmail, contrairement à Calendar).
+
+    `drafts.create`/`drafts.send` génèrent toujours un nouvel identifiant côté
+    Google : sans cette table, un retry après timeout enverrait un second email
+    identique. Elle joue le rôle qu'un en-tête `Idempotency-Key` jouerait si
+    l'API le proposait.
+    """
+
+    __tablename__ = "idempotency_records"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    result_id: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class AuditLog(Base):
     """Journal des actions. Non négociable : sans lui, aucune enquête possible."""
 

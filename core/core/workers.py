@@ -72,6 +72,8 @@ class JobContext:
     master_key: bytes | None
     engine: object | None = None
     calendar_provider: object | None = None  # utilisé par sync_calendars_job
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
 
 
 async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
@@ -81,13 +83,22 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
     fermés sur les identifiants Google de `user_id`, donc un registre partagé
     entre jobs ferait fuiter l'agenda d'un utilisateur vers un autre.
     """
-    from .db.repositories import PostgresApprovalRegistry, PostgresCredentialStore
+    from .db.repositories import (
+        PostgresApprovalRegistry,
+        PostgresCredentialStore,
+        PostgresIdempotencyStore,
+    )
     from .db.session import session_scope
     from .integrations.google_oauth import ensure_fresh
+    from .integrations.microsoft_oauth import ensure_fresh as ensure_fresh_microsoft
     from .llm import build_nodes
     from .messaging import ChannelFormatter
     from .pipeline import IncomingMessage, Pipeline
+    from .providers.gmail import GmailProvider
     from .providers.google_calendar import GoogleCalendar
+    from .providers.outlook_calendar import OutlookCalendar
+    from .tools.calendar_tools import register_calendar_tools
+    from .tools.mail_tools import register_mail_tools
     from .providers.google_people import GooglePeopleProvider
     from .tools.calendar_tools import register_calendar_tools
     from .tools.contacts_tools import register_contacts_tools
@@ -133,6 +144,32 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             register_calendar_tools(tools, provider)
             integrations.append("google_calendar")
 
+            # Même jeton Google, mêmes scopes (gmail.modify/gmail.send déjà
+            # demandés par google_oauth.py) : pas de second CredentialStore.
+            gmail = GmailProvider(deps.http_transport, _access_token, PostgresIdempotencyStore(session))
+            register_mail_tools(tools, gmail)
+            integrations.append("gmail")
+        elif deps.microsoft_client_id and deps.master_key:
+            # `calendar.*` est un seul jeu d'outils dans le registre : un
+            # déploiement sert soit Google, soit Microsoft pour le calendrier,
+            # jamais les deux à la fois pour un même utilisateur.
+            store = PostgresCredentialStore(session, key=deps.master_key, provider="microsoft")
+
+            async def _access_token_ms() -> str:
+                creds = await ensure_fresh_microsoft(
+                    deps.http_transport,
+                    store,
+                    user_id,
+                    deps.microsoft_client_id,
+                    deps.microsoft_client_secret,
+                )
+                return creds.access_token
+
+            provider = OutlookCalendar(
+                deps.http_transport, _access_token_ms, PostgresIdempotencyStore(session)
+            )
+            register_calendar_tools(tools, provider)
+            integrations.append("outlook_calendar")
             # Même jeton Google, mêmes scopes (contacts.readonly déjà demandé
             # par google_oauth.py) : pas de second CredentialStore.
             people = GooglePeopleProvider(deps.http_transport, _access_token)
@@ -219,6 +256,8 @@ async def startup(ctx: dict) -> None:
         google_client_secret=os.environ.get("NOVA_GOOGLE_CLIENT_SECRET", ""),
         master_key=master_key,
         engine=engine,
+        microsoft_client_id=os.environ.get("NOVA_MICROSOFT_CLIENT_ID", ""),
+        microsoft_client_secret=os.environ.get("NOVA_MICROSOFT_CLIENT_SECRET", ""),
     )
     log.info("worker démarré")
 

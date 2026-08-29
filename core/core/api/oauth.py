@@ -60,13 +60,19 @@ async def handle_callback(
     state: str,
     session_user_id: str | None = None,
     now: float | None = None,
+    exchange_code=None,
 ) -> str:
     """Échange le code contre des jetons et les enregistre chiffrés.
     `session_user_id` est l'utilisateur connecté au moment du retour. S'il ne
     correspond pas au state, on refuse : c'est exactement la signature d'une
     attaque par confusion de compte.
+
+    `exchange_code` est injectable : Google et Microsoft ont chacun leur propre
+    fonction (endpoints et forme de requête différents), mais le state signé,
+    la garde anti-confusion de compte et le stockage sont partagés.
     """
-    from ..integrations.google_oauth import exchange_code
+    if exchange_code is None:
+        from ..integrations.google_oauth import exchange_code
     user_id = verify_state(state, config.state_secret, now)
     if session_user_id is not None and session_user_id != user_id:
         raise StateError("le state ne correspond pas à l'utilisateur connecté")

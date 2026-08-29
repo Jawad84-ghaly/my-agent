@@ -36,6 +36,11 @@ Ce qui est implémenté et couvert par des tests :
 | `core/db/repositories.py` | Registres durables : canaux, validations, dédup, jetons |
 | `core/db/session.py` | Moteur, sessions, portée transactionnelle |
 | `alembic/` | Migrations — `alembic upgrade head` |
+| `core/api/main.py` | Gateway FastAPI : webhook WhatsApp sur les registres Postgres, mise en file ARQ, flows OAuth Google et Microsoft |
+| `core/tools/calendar_tools.py` | Outils `calendar.*`, liés à un provider Google ou Microsoft selon la configuration |
+| `core/providers/gmail.py` | Provider Gmail réel : brouillon puis envoi, dédoublonnage applicatif faute d'id imposable côté Google |
+| `core/tools/mail_tools.py` | Outils `mail.draft`/`mail.send` liés à ce provider |
+| `core/providers/outlook_calendar.py` | Provider Microsoft Graph réel pour `calendar.*` — alternatif à Google, même dédoublonnage applicatif |
 | `core/api/main.py` | Gateway FastAPI : webhook WhatsApp sur les registres Postgres, mise en file ARQ, flow OAuth Google |
 | `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google |
 | `core/providers/google_people.py` | Provider People réel — fournit de vrais candidats à `core/contacts.py` |
@@ -44,6 +49,11 @@ Ce qui est implémenté et couvert par des tests :
 Ce qui reste à câbler :
 
 - Le déploiement réel : premier appel Anthropic facturé, instance WhatsApp
+- People API (`contacts.resolve` sur de vraies données) — le prompt du
+  planificateur le référence déjà, mais l'intégration n'existe pas : un plan
+  qui l'invoque le voit écarté comme outil inconnu
+- Le courrier Microsoft (Outlook Mail) — seul Calendar a un équivalent
+  Microsoft pour l'instant ; `mail.*` reste Gmail uniquement
 - Gmail (`mail.draft`/`mail.send`) — le prompt du planificateur le référence
   déjà, mais l'intégration n'existe pas : un plan qui l'invoque le voit
   écarté comme outil inconnu
@@ -67,6 +77,45 @@ deux appels de fonction indépendants, potentiellement sur des workers
 différents. Un « ok » qui ne retrouverait pas la validation posée par le
 message précédent reviendrait à relancer une planification vide — exactement
 le mode de panne que la persistance devait éliminer.
+
+## Gmail
+
+`core/providers/gmail.py` + `core/tools/mail_tools.py`, câblés dans le worker
+juste après Calendar (`core/workers.py`), sur le même jeton Google — les
+scopes `gmail.modify`/`gmail.send` sont déjà demandés par
+`integrations/google_oauth.py`, donc pas de second flow OAuth ni de second
+`CredentialStore`.
+
+**Pas d'id imposable côté client, contrairement à Calendar.** L'API Gmail
+génère toujours un nouvel identifiant sur `drafts.create` et `drafts.send` :
+un retry après timeout enverrait donc un second email identique si rien ne
+l'en empêchait. `PostgresIdempotencyStore` (`core/db/repositories.py`,
+table `idempotency_records`) joue le rôle qu'un en-tête `Idempotency-Key`
+jouerait si Gmail en proposait un — la clé dérivée par le registre d'outils
+est vérifiée avant l'appel HTTP et enregistrée après.
+
+Le planificateur chaîne toujours `mail.draft` (libre) puis `mail.send`
+(gated, comme `calendar.delete_event`) : un envoi direct n'existe pas dans le
+prompt. `contacts.resolve` (People API) n'a pas d'implémentation — un plan
+qui l'invoque le voit écarté comme outil inconnu, donc les adresses email
+doivent encore venir du message de l'utilisateur.
+
+## Outlook (Microsoft Graph)
+
+`core/providers/outlook_calendar.py`, alternatif à Google pour `calendar.*`
+(`core/workers.py` choisit Google en priorité si les deux sont configurés —
+jamais les deux à la fois pour un même utilisateur, puisque les outils
+`calendar.*` sont un seul jeu de noms dans le registre). Flow OAuth séparé
+(`core/integrations/microsoft_oauth.py`, `GET /oauth/microsoft/start` puis
+`/oauth/microsoft/callback`), sur le tenant `common` (comptes personnels et
+professionnels/scolaires) — mêmes garde-fous que Google : `key` en secret
+d'opérateur sur `/start`, `state` signé et daté portant l'identité.
+
+**Pas d'id imposable côté client non plus.** Microsoft Graph attribue toujours
+lui-même l'id d'un événement créé, comme Gmail et contrairement à Google
+Calendar : même `IdempotencyStore` (`core/idempotency.py`) que pour Gmail.
+
+Pas d'équivalent Outlook Mail pour l'instant — `mail.*` reste Gmail uniquement.
 
 ## Flow OAuth Google
 
@@ -143,6 +192,7 @@ document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse c
 
 ## Tests
 
+216 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
 200 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
 permettent d'exercer tout le graphe hors ligne.
 

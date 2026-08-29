@@ -16,6 +16,7 @@ from ..channels import PAIRING_TTL
 from ..db.repositories import PostgresChannelRegistry, PostgresCredentialStore, PostgresSeenCache
 from ..db.session import database_url, make_engine, make_session_factory, session_scope
 from ..integrations.google_oauth import build_authorization_url
+from ..integrations import microsoft_oauth
 from ..integrations.http import HttpxTransport
 from ..security.crypto import load_master_key
 from ..workers import Priority
@@ -27,6 +28,9 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 GOOGLE_CLIENT_ID = os.environ.get("NOVA_GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("NOVA_GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.environ.get("NOVA_GOOGLE_REDIRECT_URI", "")
+MICROSOFT_CLIENT_ID = os.environ.get("NOVA_MICROSOFT_CLIENT_ID", "")
+MICROSOFT_CLIENT_SECRET = os.environ.get("NOVA_MICROSOFT_CLIENT_SECRET", "")
+MICROSOFT_REDIRECT_URI = os.environ.get("NOVA_MICROSOFT_REDIRECT_URI", "")
 OAUTH_STATE_SECRET = os.environ.get("NOVA_OAUTH_STATE_SECRET", "")
 #: Nova n'a pas de login : ce secret tient lieu d'authentification sur
 #: `/oauth/google/start`. Sans lui, n'importe qui pourrait lier son propre
@@ -43,6 +47,15 @@ def _oauth_config() -> OAuthConfig:
         client_id=GOOGLE_CLIENT_ID,
         client_secret=GOOGLE_CLIENT_SECRET,
         redirect_uri=GOOGLE_REDIRECT_URI,
+        state_secret=OAUTH_STATE_SECRET,
+    )
+
+
+def _microsoft_oauth_config() -> OAuthConfig:
+    return OAuthConfig(
+        client_id=MICROSOFT_CLIENT_ID,
+        client_secret=MICROSOFT_CLIENT_SECRET,
+        redirect_uri=MICROSOFT_REDIRECT_URI,
         state_secret=OAUTH_STATE_SECRET,
     )
 
@@ -101,6 +114,46 @@ async def oauth_google_callback(request: Request, code: str, state: str) -> dict
     finally:
         await transport.aclose()
     log.info("intégration Google connectée pour %s", user_id)
+    return {"status": "ok"}
+
+
+@app.get("/oauth/microsoft/start")
+async def oauth_microsoft_start(user_id: str, key: str) -> RedirectResponse:
+    """Démarre le flow Microsoft pour `user_id`, même garde que `/oauth/google/start`."""
+    if not OAUTH_START_SECRET or not hmac.compare_digest(key, OAUTH_START_SECRET):
+        raise HTTPException(status_code=403, detail="clé invalide")
+    state = sign_state(user_id, OAUTH_STATE_SECRET)
+    url = microsoft_oauth.build_authorization_url(
+        MICROSOFT_CLIENT_ID, MICROSOFT_REDIRECT_URI, state
+    )
+    return RedirectResponse(url)
+
+
+@app.get("/oauth/microsoft/callback")
+async def oauth_microsoft_callback(request: Request, code: str, state: str) -> dict[str, str]:
+    """Échange le code contre des jetons Microsoft et les enregistre chiffrés.
+
+    Même state signé qu'un callback Google — c'est lui, pas ce endpoint, qui
+    porte la garantie anti-confusion de compte.
+    """
+    transport = HttpxTransport()
+    try:
+        async with session_scope(request.app.state.session_factory) as session:
+            store = PostgresCredentialStore(session, key=load_master_key(), provider="microsoft")
+            try:
+                user_id = await handle_callback(
+                    _microsoft_oauth_config(),
+                    transport,
+                    store,
+                    code,
+                    state,
+                    exchange_code=microsoft_oauth.exchange_code,
+                )
+            except StateError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        await transport.aclose()
+    log.info("intégration Microsoft connectée pour %s", user_id)
     return {"status": "ok"}
 
 
