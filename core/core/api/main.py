@@ -12,6 +12,7 @@ from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from ..channels import PAIRING_TTL
 from ..db.repositories import PostgresChannelRegistry, PostgresCredentialStore, PostgresSeenCache
 from ..db.session import database_url, make_engine, make_session_factory, session_scope
 from ..integrations.google_oauth import build_authorization_url
@@ -32,6 +33,9 @@ OAUTH_STATE_SECRET = os.environ.get("NOVA_OAUTH_STATE_SECRET", "")
 #: compte Google à l'identité d'un autre utilisateur Nova via ce endpoint —
 #: exactement la confusion de compte que `handle_callback` refuse plus loin.
 OAUTH_START_SECRET = os.environ.get("NOVA_OAUTH_START_SECRET", "")
+#: Même rôle qu'OAUTH_START_SECRET, pour la seule autre route qui agit au nom
+#: d'un user_id arbitraire : émettre un code d'appairage WhatsApp.
+ADMIN_SECRET = os.environ.get("NOVA_ADMIN_SECRET", "")
 
 
 def _oauth_config() -> OAuthConfig:
@@ -98,6 +102,23 @@ async def oauth_google_callback(request: Request, code: str, state: str) -> dict
         await transport.aclose()
     log.info("intégration Google connectée pour %s", user_id)
     return {"status": "ok"}
+
+
+@app.post("/admin/pairing-code")
+async def admin_issue_pairing_code(request: Request, user_id: str, key: str) -> dict[str, object]:
+    """Émet un code d'appairage WhatsApp à 6 chiffres pour `user_id`.
+
+    Il n'existe nulle part ailleurs de moyen d'obtenir ce premier code — pas de
+    dashboard, pas de CLI — donc pas de moyen de rattacher un premier numéro
+    WhatsApp à un utilisateur sans passer par ici. Protégé par le même schéma
+    que `/oauth/google/start` : un secret d'opérateur, pas une session.
+    """
+    if not ADMIN_SECRET or not hmac.compare_digest(key, ADMIN_SECRET):
+        raise HTTPException(status_code=403, detail="clé invalide")
+    async with session_scope(request.app.state.session_factory) as session:
+        channels = PostgresChannelRegistry(session)
+        code = await channels.issue_code(user_id)
+    return {"code": code, "expires_in_minutes": int(PAIRING_TTL.total_seconds() // 60)}
 
 
 @app.post("/webhooks/whatsapp")

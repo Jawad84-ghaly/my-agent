@@ -22,6 +22,7 @@ from core.security.crypto import generate_key, load_master_key
 
 STATE_SECRET = "state-secret"
 START_SECRET = "start-secret"
+ADMIN_SECRET = "admin-secret"
 
 
 def run(coro):
@@ -32,6 +33,7 @@ def run(coro):
 def _configure(monkeypatch):
     monkeypatch.setattr(main, "OAUTH_STATE_SECRET", STATE_SECRET)
     monkeypatch.setattr(main, "OAUTH_START_SECRET", START_SECRET)
+    monkeypatch.setattr(main, "ADMIN_SECRET", ADMIN_SECRET)
     monkeypatch.setattr(main, "GOOGLE_CLIENT_ID", "client-id")
     monkeypatch.setattr(main, "GOOGLE_CLIENT_SECRET", "client-secret")
     monkeypatch.setattr(main, "GOOGLE_REDIRECT_URI", "https://nova.example/oauth/google/callback")
@@ -163,6 +165,50 @@ def test_callback_rejects_state_signed_with_a_different_secret(monkeypatch):
             "/oauth/google/callback", params={"code": "authcode", "state": forged}
         )
         assert r.status_code == 400
+
+    run(_with_app(body))
+
+
+# --- code d'appairage (admin) -------------------------------------------
+
+
+def test_admin_pairing_code_rejects_wrong_key():
+    async def body(client):
+        r = await client.post(
+            "/admin/pairing-code", params={"user_id": "u1", "key": "wrong"}
+        )
+        assert r.status_code == 403
+
+    run(_with_app(body))
+
+
+def test_admin_pairing_code_rejects_missing_secret_even_with_empty_key(monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_SECRET", "")
+
+    async def body(client):
+        r = await client.post("/admin/pairing-code", params={"user_id": "u1", "key": ""})
+        assert r.status_code == 403
+
+    run(_with_app(body))
+
+
+def test_admin_pairing_code_issues_a_redeemable_code():
+    async def body(client):
+        r = await client.post(
+            "/admin/pairing-code", params={"user_id": "u1", "key": ADMIN_SECRET}
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["expires_in_minutes"] == 10
+        code = data["code"]
+        assert code.isdigit() and len(code) == 6
+
+        from core.db.repositories import PostgresChannelRegistry
+
+        async with main.app.state.session_factory() as session:
+            channels = PostgresChannelRegistry(session)
+            channel = await channels.redeem(code, "whatsapp", "33612345678")
+            assert channel.user_id == "u1"
 
     run(_with_app(body))
 
