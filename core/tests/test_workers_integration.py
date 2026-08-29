@@ -188,6 +188,49 @@ def test_approval_survives_across_jobs():
     run(_with_deps(client, body))
 
 
+# --- Gmail : gated, et dédoublonné à travers deux jobs ---------------------
+
+
+def test_mail_send_is_gated_and_survives_across_jobs():
+    """`mail.send` est toujours gated : le brouillon part au premier job, l'envoi
+    attend le second (le « ok », un appel de fonction différent). Gmail ne
+    proposant pas d'id imposable côté client, c'est `PostgresIdempotencyStore`
+    qui empêche un double envoi si ce second job était lui-même rejoué."""
+    client = client_returning(
+        ROUTE_STANDARD,
+        {"tasks": [
+            {"id": "T1", "tool": "mail.draft",
+             "args": {"to": ["marc@exemple.fr"], "subject": "Point", "body": "Salut"},
+             "depends_on": []},
+            {"id": "T2", "tool": "mail.send",
+             "args": {"draft_id": "{{T1.id}}", "to_display": "{{T1.to_display}}",
+                       "subject": "{{T1.subject}}", "body": "{{T1.body}}"},
+             "depends_on": ["T1"]},
+        ]},
+        "✅ Email envoyé.",
+    )
+
+    def handler(request, _index):
+        if request.url.endswith("/drafts"):
+            return Response(200, {"id": "draft-1"})
+        return Response(200, {"id": "msg-1", "threadId": "th-1"})
+
+    async def body(deps, _transport):
+        deps.http_transport = FakeTransport(handler)
+        ctx = {"deps": deps}
+
+        first = await handle_message_job(ctx, "u1", msg("envoie un email à marc", "m1"))
+        assert "Réponds" in first  # récapitulatif de validation, rien n'est parti
+        assert any(r.url.endswith("/drafts") for r in deps.http_transport.requests)
+        assert not any(r.url.endswith("/drafts/send") for r in deps.http_transport.requests)
+
+        second = await handle_message_job(ctx, "u1", msg("ok", "m2"))
+        assert second == "✅ Email envoyé."
+        assert any(r.url.endswith("/drafts/send") for r in deps.http_transport.requests)
+
+    run(_with_deps(client, body))
+
+
 # --- dégradations gracieuses -------------------------------------------
 
 

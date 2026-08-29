@@ -26,7 +26,7 @@ from ..channels import MAX_ATTEMPTS, PAIRING_TTL, Channel, PairingError
 from ..gate import APPROVAL_TTL
 from ..planning import Task
 from ..security.crypto import build_aad, decrypt_token, encrypt_token
-from .models import Approval, Integration
+from .models import Approval, IdempotencyRecord, Integration
 from .models import Channel as ChannelRow
 from .models import PairingCode as PairingRow
 from .models import SeenMessage
@@ -284,6 +284,30 @@ class PostgresCredentialStore:
                 )
             )
         ).scalar_one_or_none()
+
+
+@dataclass
+class PostgresIdempotencyStore:
+    """Dédup durable pour les opérations sans id imposable côté client (Gmail).
+
+    Un job ARQ retenté après timeout est un nouvel appel de fonction : une
+    mémorisation en mémoire ne survivrait pas jusqu'au retry, exactement le
+    problème que `PostgresApprovalRegistry` résout déjà pour les validations.
+    """
+
+    session: AsyncSession
+
+    async def get(self, key: str) -> str | None:
+        row = (
+            await self.session.execute(
+                select(IdempotencyRecord).where(IdempotencyRecord.key == key)
+            )
+        ).scalar_one_or_none()
+        return row.result_id if row is not None else None
+
+    async def put(self, key: str, result_id: str) -> None:
+        self.session.add(IdempotencyRecord(key=key, result_id=result_id))
+        await self.session.flush()
 
 
 # --- conversions -----------------------------------------------------------

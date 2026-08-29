@@ -1,8 +1,9 @@
-"""Outils `calendar.*` — la seule intégration avec un vrai backend pour l'instant.
+"""Outils `calendar.*`, liés à un provider Google.
 
-`mail.draft`/`mail.send` et `contacts.resolve` sont référencés par le prompt du
-planificateur mais n'ont pas d'implémentation (pas de Gmail, pas de People API) ;
-un plan qui les invoque les voit écartés comme outils inconnus, sans planter.
+`contacts.resolve` est référencé par le prompt du planificateur mais n'a pas
+d'implémentation (pas de People API) ; un plan qui l'invoque le voit écarté
+comme outil inconnu, sans planter. `mail.draft`/`mail.send` sont eux
+implémentés — voir `tools/mail_tools.py`.
 
 Les arguments arrivent en JSON depuis le plan du modèle — des dates en ISO 8601,
 jamais des `datetime` — et les résultats repartent en dict JSON-sérialisable pour

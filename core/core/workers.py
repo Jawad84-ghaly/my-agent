@@ -81,14 +81,20 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
     fermés sur les identifiants Google de `user_id`, donc un registre partagé
     entre jobs ferait fuiter l'agenda d'un utilisateur vers un autre.
     """
-    from .db.repositories import PostgresApprovalRegistry, PostgresCredentialStore
+    from .db.repositories import (
+        PostgresApprovalRegistry,
+        PostgresCredentialStore,
+        PostgresIdempotencyStore,
+    )
     from .db.session import session_scope
     from .integrations.google_oauth import ensure_fresh
     from .llm import build_nodes
     from .messaging import ChannelFormatter
     from .pipeline import IncomingMessage, Pipeline
+    from .providers.gmail import GmailProvider
     from .providers.google_calendar import GoogleCalendar
     from .tools.calendar_tools import register_calendar_tools
+    from .tools.mail_tools import register_mail_tools
     from .tools.registry import ToolRegistry
 
     deps: JobContext = ctx["deps"]
@@ -130,6 +136,12 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             provider = GoogleCalendar(deps.http_transport, _access_token)
             register_calendar_tools(tools, provider)
             integrations.append("google_calendar")
+
+            # Même jeton Google, mêmes scopes (gmail.modify/gmail.send déjà
+            # demandés par google_oauth.py) : pas de second CredentialStore.
+            gmail = GmailProvider(deps.http_transport, _access_token, PostgresIdempotencyStore(session))
+            register_mail_tools(tools, gmail)
+            integrations.append("gmail")
 
         router, planner, responder = build_nodes(
             deps.anthropic_client, frozenset(tools.tools), integrations=integrations

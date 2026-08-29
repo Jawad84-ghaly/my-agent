@@ -37,16 +37,18 @@ Ce qui est implémenté et couvert par des tests :
 | `core/db/session.py` | Moteur, sessions, portée transactionnelle |
 | `alembic/` | Migrations — `alembic upgrade head` |
 | `core/api/main.py` | Gateway FastAPI : webhook WhatsApp sur les registres Postgres, mise en file ARQ, flow OAuth Google |
-| `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google — la seule intégration avec un vrai backend |
+| `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google |
+| `core/providers/gmail.py` | Provider Gmail réel : brouillon puis envoi, dédoublonnage applicatif faute d'id imposable côté Google |
+| `core/tools/mail_tools.py` | Outils `mail.draft`/`mail.send` liés à ce provider |
 
 Ce qui reste à câbler :
 
 - Le déploiement réel : premier appel Anthropic facturé, instance WhatsApp
-- Gmail (`mail.draft`/`mail.send`) et People API (`contacts.resolve` sur de
-  vraies données) — le prompt du planificateur les référence déjà, mais
-  aucune des deux intégrations n'existe : un plan qui les invoque les voit
-  simplement écartés comme outils inconnus
-- Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
+- People API (`contacts.resolve` sur de vraies données) — le prompt du
+  planificateur le référence déjà, mais l'intégration n'existe pas : un plan
+  qui l'invoque le voit écarté comme outil inconnu
+- Le provider Microsoft Graph, pour Calendar et pour le courrier (Google est
+  fait pour les deux ; les interfaces sont partagées)
 
 ## Le worker en production
 
@@ -64,6 +66,28 @@ deux appels de fonction indépendants, potentiellement sur des workers
 différents. Un « ok » qui ne retrouverait pas la validation posée par le
 message précédent reviendrait à relancer une planification vide — exactement
 le mode de panne que la persistance devait éliminer.
+
+## Gmail
+
+`core/providers/gmail.py` + `core/tools/mail_tools.py`, câblés dans le worker
+juste après Calendar (`core/workers.py`), sur le même jeton Google — les
+scopes `gmail.modify`/`gmail.send` sont déjà demandés par
+`integrations/google_oauth.py`, donc pas de second flow OAuth ni de second
+`CredentialStore`.
+
+**Pas d'id imposable côté client, contrairement à Calendar.** L'API Gmail
+génère toujours un nouvel identifiant sur `drafts.create` et `drafts.send` :
+un retry après timeout enverrait donc un second email identique si rien ne
+l'en empêchait. `PostgresIdempotencyStore` (`core/db/repositories.py`,
+table `idempotency_records`) joue le rôle qu'un en-tête `Idempotency-Key`
+jouerait si Gmail en proposait un — la clé dérivée par le registre d'outils
+est vérifiée avant l'appel HTTP et enregistrée après.
+
+Le planificateur chaîne toujours `mail.draft` (libre) puis `mail.send`
+(gated, comme `calendar.delete_event`) : un envoi direct n'existe pas dans le
+prompt. `contacts.resolve` (People API) n'a pas d'implémentation — un plan
+qui l'invoque le voit écarté comme outil inconnu, donc les adresses email
+doivent encore venir du message de l'utilisateur.
 
 ## Flow OAuth Google
 
@@ -140,7 +164,7 @@ document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse c
 
 ## Tests
 
-176 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
+204 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
 permettent d'exercer tout le graphe hors ligne.
 
 `FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et
