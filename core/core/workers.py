@@ -88,7 +88,9 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
     from .messaging import ChannelFormatter
     from .pipeline import IncomingMessage, Pipeline
     from .providers.google_calendar import GoogleCalendar
+    from .providers.google_people import GooglePeopleProvider
     from .tools.calendar_tools import register_calendar_tools
+    from .tools.contacts_tools import register_contacts_tools
     from .tools.registry import ToolRegistry
 
     deps: JobContext = ctx["deps"]
@@ -130,6 +132,12 @@ async def handle_message_job(ctx: dict, user_id: str, payload: dict) -> str:
             provider = GoogleCalendar(deps.http_transport, _access_token)
             register_calendar_tools(tools, provider)
             integrations.append("google_calendar")
+
+            # Même jeton Google, mêmes scopes (contacts.readonly déjà demandé
+            # par google_oauth.py) : pas de second CredentialStore.
+            people = GooglePeopleProvider(deps.http_transport, _access_token)
+            register_contacts_tools(tools, people)
+            integrations.append("contacts")
 
         router, planner, responder = build_nodes(
             deps.anthropic_client, frozenset(tools.tools), integrations=integrations

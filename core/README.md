@@ -37,15 +37,18 @@ Ce qui est implémenté et couvert par des tests :
 | `core/db/session.py` | Moteur, sessions, portée transactionnelle |
 | `alembic/` | Migrations — `alembic upgrade head` |
 | `core/api/main.py` | Gateway FastAPI : webhook WhatsApp sur les registres Postgres, mise en file ARQ, flow OAuth Google |
-| `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google — la seule intégration avec un vrai backend |
+| `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google |
+| `core/providers/google_people.py` | Provider People réel — fournit de vrais candidats à `core/contacts.py` |
+| `core/tools/contacts_tools.py` | Outils `contacts.resolve`/`contacts.get` liés à ce provider |
 
 Ce qui reste à câbler :
 
 - Le déploiement réel : premier appel Anthropic facturé, instance WhatsApp
-- Gmail (`mail.draft`/`mail.send`) et People API (`contacts.resolve` sur de
-  vraies données) — le prompt du planificateur les référence déjà, mais
-  aucune des deux intégrations n'existe : un plan qui les invoque les voit
-  simplement écartés comme outils inconnus
+- Gmail (`mail.draft`/`mail.send`) — le prompt du planificateur le référence
+  déjà, mais l'intégration n'existe pas : un plan qui l'invoque le voit
+  écarté comme outil inconnu
+- `contacts.recent_interactions` — nécessiterait de miner l'historique des
+  messages, pas le carnet d'adresses ; fonctionnalité distincte, non construite
 - Le provider Microsoft Graph (Google est fait ; l'interface est partagée)
 
 ## Le worker en production
@@ -140,7 +143,7 @@ document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse c
 
 ## Tests
 
-176 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
+200 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
 permettent d'exercer tout le graphe hors ligne.
 
 `FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et
