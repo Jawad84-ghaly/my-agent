@@ -236,6 +236,7 @@ class PostgresCredentialStore:
 
     async def load(self, user_id: str):
         from ..integrations.google_oauth import GoogleCredentials
+        from ..integrations.microsoft_oauth import MicrosoftCredentials
         from ..store import UnknownIntegration
 
         row = await self._row(user_id)
@@ -245,7 +246,11 @@ class PostgresCredentialStore:
                 "L'utilisateur doit d'abord autoriser l'accès."
             )
         aad = build_aad(user_id, self.provider)
-        return GoogleCredentials(
+        # Même forme (access_token, refresh_token, expires_at) des deux côtés :
+        # seul le type renvoyé change, pour rester celui qu'attend `ensure_fresh`
+        # du fournisseur concerné.
+        credentials_cls = GoogleCredentials if self.provider == "google" else MicrosoftCredentials
+        return credentials_cls(
             access_token=decrypt_token(row.access_token_enc, aad, self.key),
             refresh_token=decrypt_token(row.refresh_token_enc, aad, self.key),
             expires_at=row.expires_at,

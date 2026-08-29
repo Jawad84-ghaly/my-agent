@@ -15,8 +15,9 @@ from __future__ import annotations
 import base64
 from email.mime.text import MIMEText
 
+from ..idempotency import IdempotencyStore, InMemoryIdempotencyStore
 from ..integrations.http import Transport, request_with_retry
-from .mail import Draft, IdempotencyStore, InMemoryIdempotencyStore, SentMessage
+from .mail import Draft, SentMessage
 
 API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
 

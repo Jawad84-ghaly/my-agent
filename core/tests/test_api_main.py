@@ -37,6 +37,11 @@ def _configure(monkeypatch):
     monkeypatch.setattr(main, "GOOGLE_CLIENT_ID", "client-id")
     monkeypatch.setattr(main, "GOOGLE_CLIENT_SECRET", "client-secret")
     monkeypatch.setattr(main, "GOOGLE_REDIRECT_URI", "https://nova.example/oauth/google/callback")
+    monkeypatch.setattr(main, "MICROSOFT_CLIENT_ID", "ms-client-id")
+    monkeypatch.setattr(main, "MICROSOFT_CLIENT_SECRET", "ms-client-secret")
+    monkeypatch.setattr(
+        main, "MICROSOFT_REDIRECT_URI", "https://nova.example/oauth/microsoft/callback"
+    )
     monkeypatch.setenv("NOVA_MASTER_KEY", generate_key())
 
 
@@ -163,6 +168,68 @@ def test_callback_rejects_state_signed_with_a_different_secret(monkeypatch):
     async def body(client):
         r = await client.get(
             "/oauth/google/callback", params={"code": "authcode", "state": forged}
+        )
+        assert r.status_code == 400
+
+    run(_with_app(body))
+
+
+# --- flow Microsoft, même garde-fous que Google ----------------------------
+
+
+def test_microsoft_start_rejects_wrong_key():
+    async def body(client):
+        r = await client.get("/oauth/microsoft/start", params={"user_id": "u1", "key": "wrong"})
+        assert r.status_code == 403
+
+    run(_with_app(body))
+
+
+def test_microsoft_start_redirects_with_signed_state():
+    async def body(client):
+        r = await client.get(
+            "/oauth/microsoft/start", params={"user_id": "u1", "key": START_SECRET}
+        )
+        assert r.status_code in (302, 307)
+        location = r.headers["location"]
+        assert location.startswith("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?")
+        qs = parse_qs(urlparse(location).query)
+        assert qs["client_id"] == ["ms-client-id"]
+        assert "offline_access" in qs["scope"][0]
+        assert "state" in qs
+
+    run(_with_app(body))
+
+
+def test_microsoft_callback_persists_encrypted_credentials(monkeypatch):
+    _fake_token_response(monkeypatch)
+
+    async def body(client):
+        start = await client.get(
+            "/oauth/microsoft/start", params={"user_id": "u1", "key": START_SECRET}
+        )
+        state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
+
+        r = await client.get(
+            "/oauth/microsoft/callback", params={"code": "authcode", "state": state}
+        )
+        assert r.status_code == 200
+
+        async with main.app.state.session_factory() as session:
+            store = PostgresCredentialStore(session, key=load_master_key(), provider="microsoft")
+            creds = await store.load("u1")
+            assert creds.access_token == "AT"
+            assert creds.refresh_token == "RT"
+
+    run(_with_app(body))
+
+
+def test_microsoft_callback_rejects_forged_state(monkeypatch):
+    _fake_token_response(monkeypatch)
+
+    async def body(client):
+        r = await client.get(
+            "/oauth/microsoft/callback", params={"code": "authcode", "state": "not-a-real-state"}
         )
         assert r.status_code == 400
 

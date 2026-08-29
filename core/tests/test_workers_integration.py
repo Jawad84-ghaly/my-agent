@@ -231,6 +231,46 @@ def test_mail_send_is_gated_and_survives_across_jobs():
     run(_with_deps(client, body))
 
 
+# --- Outlook : bascule quand Google n'est pas configuré --------------------
+
+
+def test_outlook_calendar_is_offered_when_microsoft_is_configured_instead_of_google():
+    """`calendar.*` est un seul jeu d'outils dans le registre : un déploiement
+    sert Google ou Microsoft pour le calendrier, jamais les deux à la fois."""
+    client = client_returning(
+        ROUTE_STANDARD,
+        {"tasks": [{"id": "T1", "tool": "calendar.list_events",
+                    "args": {"start": "2026-08-27T00:00:00+00:00", "end": "2026-08-28T00:00:00+00:00"},
+                    "depends_on": []}]},
+        "Rien de prévu.",
+    )
+
+    def handler(request, _index):
+        assert "graph.microsoft.com" in request.url
+        return Response(200, {"value": []})
+
+    async def body(deps, _transport):
+        deps.google_client_id = ""
+        deps.master_key = KEY
+        deps.microsoft_client_id = "ms-cid"
+        deps.microsoft_client_secret = "ms-secret"
+        deps.http_transport = FakeTransport(handler)
+
+        async with deps.session_factory() as session:
+            from core.db.repositories import PostgresCredentialStore
+            from core.integrations.microsoft_oauth import MicrosoftCredentials
+
+            store = PostgresCredentialStore(session, key=KEY, provider="microsoft")
+            await store.save("u1", MicrosoftCredentials("AT", "RT", time.time() + 3600))
+            await session.commit()
+
+        ctx = {"deps": deps}
+        result = await handle_message_job(ctx, "u1", msg("mon agenda de demain"))
+        assert result == "Rien de prévu."
+
+    run(_with_deps(client, body, google=False))
+
+
 # --- dégradations gracieuses -------------------------------------------
 
 
