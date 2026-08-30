@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from ..channels import PAIRING_TTL
 from ..db.repositories import PostgresChannelRegistry, PostgresCredentialStore, PostgresSeenCache
@@ -41,6 +42,20 @@ OAUTH_START_SECRET = os.environ.get("NOVA_OAUTH_START_SECRET", "")
 #: Même rôle qu'OAUTH_START_SECRET, pour la seule autre route qui agit au nom
 #: d'un user_id arbitraire : émettre un code d'appairage WhatsApp.
 ADMIN_SECRET = os.environ.get("NOVA_ADMIN_SECRET", "")
+#: L'app web (voir app/) appelle `/app/pair` et `/app/messages` depuis un
+#: navigateur, donc une origine différente de celle de l'API — sans CORS, le
+#: navigateur bloque la réponse avant même qu'elle atteigne le code Dart.
+#: `*` par défaut : ces deux routes ne portent aucun cookie, seulement un
+#: jeton `Authorization` que le client fournit lui-même, donc élargir les
+#: origines n'ouvre pas d'accès qui n'existait pas déjà.
+def _parse_cors_origins(raw: str) -> list[str]:
+    """Vide ou absent retombe sur `*` — un split() sur une chaîne vide
+    donnerait `[]`, ce qui interdirait tout plutôt que tout permettre."""
+    raw = raw.strip()
+    return [o.strip() for o in raw.split(",") if o.strip()] if raw else ["*"]
+
+
+CORS_ORIGINS = _parse_cors_origins(os.environ.get("NOVA_CORS_ORIGINS", ""))
 
 
 def _oauth_config() -> OAuthConfig:
@@ -79,6 +94,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Nova Core", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 app.include_router(app_channel_router)
 
 

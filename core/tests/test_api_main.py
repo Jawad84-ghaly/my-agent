@@ -61,6 +61,20 @@ async def _with_app(body):
         await engine.dispose()
 
 
+# --- CORS (voir app/, l'app web) ----------------------------------------
+
+
+def test_cors_origins_defaults_to_wildcard_when_unset():
+    assert main._parse_cors_origins("") == ["*"]
+
+
+def test_cors_origins_splits_a_comma_separated_list():
+    assert main._parse_cors_origins("https://a.example, https://b.example") == [
+        "https://a.example",
+        "https://b.example",
+    ]
+
+
 # --- santé -------------------------------------------------------------
 
 

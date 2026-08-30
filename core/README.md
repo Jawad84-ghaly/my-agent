@@ -45,7 +45,7 @@ Ce qui est implémenté et couvert par des tests :
 | `core/tools/calendar_tools.py` | Outils `calendar.*` liés à un provider Google |
 | `core/providers/google_people.py` | Provider People réel — fournit de vrais candidats à `core/contacts.py` |
 | `core/tools/contacts_tools.py` | Outils `contacts.resolve`/`contacts.get` liés à ce provider |
-| `core/api/app_channel.py` | Canal `app` pour les clients natifs (Android/iOS/Windows) — appairage puis échange synchrone |
+| `core/api/app_channel.py` | Canal `app` pour les clients natifs et web — appairage puis échange synchrone |
 
 Ce qui reste à câbler :
 
@@ -138,7 +138,7 @@ n'appelle `ChannelRegistry.issue_code`, ni dashboard ni CLI. Envoyer le code
 retourné depuis le numéro WhatsApp à appairer complète l'appairage via le
 webhook (`_try_pairing` dans `core/api/main.py`).
 
-## Canal `app` — clients natifs (Android/iOS/Windows)
+## Canal `app` — clients natifs et web (Android/iOS/Windows/navigateur)
 
 `core/api/app_channel.py`. Un client natif n'est pas WhatsApp : il attend sa
 réponse sur la requête HTTP qu'il vient d'envoyer, pas via un push asynchrone.
@@ -161,6 +161,14 @@ réponse part par la valeur de retour, un `RecordingSender` local suffit donc.
 Pas de session ni de login, comme le reste de Nova : c'est le prix pour rester
 cohérent avec le reste du système plutôt que d'inventer une deuxième forme
 d'authentification pour ce seul canal.
+
+**CORS.** L'app web (`app/`, build `flutter build web`) tourne forcément sur
+une origine différente de celle de l'API une fois hébergée : sans
+`CORSMiddleware`, le navigateur bloquerait la réponse de `/app/pair` et
+`/app/messages` avant même qu'elle atteigne le code Dart. `NOVA_CORS_ORIGINS`
+(liste séparée par des virgules, `*` par défaut) contrôle les origines
+autorisées — élargir ne relâche rien : ces deux routes ne portent aucun
+cookie, seulement un jeton `Authorization` fourni par le client lui-même.
 
 ## Démarrer
 
@@ -215,7 +223,7 @@ document au mauvais Marc est l'erreur la plus coûteuse que ce système puisse c
 
 ## Tests
 
-232 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
+235 tests, aucune dépendance réseau ni base externe — `InMemoryCalendar` et le registre d'outils
 permettent d'exercer tout le graphe hors ligne.
 
 `FakeTransport` (dans `tests/conftest.py`) rejoue des réponses HTTP scriptées et

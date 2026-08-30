@@ -136,6 +136,26 @@ def test_messages_returns_the_job_result_for_a_paired_token():
     run(_with_app(body, arq_pool=pool))
 
 
+def test_cors_preflight_allows_the_web_app_to_call_messages():
+    """Sans CORSMiddleware, le navigateur bloquerait la réponse avant même que
+    le code Dart de l'app web ne la voie — voir core/api/main.py."""
+
+    async def body(client, _pool):
+        r = await client.options(
+            "/app/messages",
+            headers={
+                "Origin": "https://nova-web.example",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+        assert r.status_code == 200
+        assert r.headers["access-control-allow-origin"] == "*"
+        assert "POST" in r.headers["access-control-allow-methods"]
+
+    run(_with_app(body))
+
+
 def test_messages_surfaces_a_timeout_as_504():
     pool = FakeArqPool()
     pool.fail_next_with(TimeoutError())
